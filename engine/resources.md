@@ -1,5 +1,7 @@
 # Resource registry: naming loaded data by (group, id)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-14). Code: `src/game/gs_res.c` (GSresInit, GSresGetResource,
 GSresRegisterResource, GSresAllocResource, GSresAllocResourceAlign; all matched) and
 `src/game/gs_thread_hi_range_800F8268.c` (`fn_800F9210` release, matched; `fn_800F92D4` lookup by id, matched).

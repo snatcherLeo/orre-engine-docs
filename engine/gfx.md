@@ -1,5 +1,7 @@
 # Rendering front end (`GSgfx*` / `gfx*`)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-15). The global state struct is complete (every field the code touches is named in
 the decomp's GSgfx header); the frame flow, the command recorder and the state cache are described below.
 The layer Genius Sonority built over HSD (`hsd.md`) and the Dolphin SDK's GX. For the port this is one

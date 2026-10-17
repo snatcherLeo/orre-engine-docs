@@ -1,5 +1,7 @@
 # Crash handler and fatal errors
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-16). What the retail game does when the CPU faults or the code hits a fatal
 check. Code: `main_tail.c` (`fn_80006250`, `fn_80006378`, `fn_800064C4`, `fn_800060F0`). **Verified** from the code and
 the executable's strings unless marked; never triggered on purpose.

@@ -1,5 +1,7 @@
 # Dolphin SDK (OS, DVD, CARD, ...)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-14). Nintendo's standard GameCube SDK (2.3-era, *likely*). Most of it matches the
 public SDK headers and the Melee decomp (*verified* for the matched units); this page records Colosseum-specific placement and what
 was learned while matching.

@@ -1,5 +1,7 @@
 # Collision (CCD files, GScolsys2)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-14). Format decoded and exported for every room; which query uses
 which part is verified from the code; a few attribute meanings are guesses (marked).
 

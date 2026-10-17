@@ -1,5 +1,7 @@
 # WZX: move-effect sequences
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-16). The file layout is decoded for every WZX file on the disc; the meaning of
 several entry settings and of most screen-effect parameters is still open. Related notes:
 models-animation.md (not yet published), "WZX file" (which file a move uses, how entries line up with the

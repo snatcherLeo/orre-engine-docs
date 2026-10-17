@@ -1,5 +1,7 @@
 # Particles: GPT1 banks and the particle byte-code
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-16). The file format is decoded and every bank on the disc reads cleanly;
 what each flag bit means is only partly known. **How sure:** the layouts come from the loader code and the byte-code
 table from the interpreter (`psInterpretParticle0`), both checked against every bank on the disc (*verified*); remarks

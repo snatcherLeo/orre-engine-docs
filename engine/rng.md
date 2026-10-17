@@ -1,5 +1,7 @@
 # RNG (random number generator)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-17). The game's one shared random number generator: its algorithm, its seeding and its
 main consumers. A faithful port must reproduce the exact sequence and timing of RNG calls, because
 RNG-manipulation tools (PokeFinder) depend on it.

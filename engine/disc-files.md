@@ -1,5 +1,7 @@
 # Disc files (what the player's disc contains)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same archive format; XD's disc contents differ)
+
 Status: **partial** (2026-10-14). Read from the disc image's file table (a walk of the
 GameCube file-system table; metadata only). 
 
@@ -10,20 +12,20 @@ GameCube file-system table; metadata only).
 | `.fsys` archives | **1,852** | Genius Sonority's archive format; nearly all game data (maps, models, scripts, messages, fonts, textures, battle data). Reader: `src/game/fsys/`. |
 | `.samp` | 7 | in `sound/`: MusyX sample banks (music.md (not yet published)) |
 | `.thp` | 5 | in `movie/`: the prerendered videos ([movies.md](movies.md)) |
-| `.bin` | 6 | root: `colbtl.bin`, `coupon.bin` and `pkjb_test.bin` are GBA programs (a valid GBA ROM header); `bg0/1/2thumbcode.bin` are header-less payloads sent to a running GBA game (**verified** headers; gba-upload.md) |
+| `.bin` | 6 | root: `colbtl.bin`, `coupon.bin` and `pkjb_test.bin` are GBA programs (a valid GBA ROM header); `bg0/1/2thumbcode.bin` are header-less e-Reader programs for the Card e battles (**verified**; gba-upload.md) |
 | `.toc`, `.bnr` | 1 each | `GSfsys.toc`: archive id -> name (below); `opening.bnr`: the disc banner |
 
 Large shared archives: `common.fsys` (743 KB), `field_common.fsys` (211 KB), `fight_common.fsys`
 (194 KB), `menu_common.fsys`. The species, move, item and trainer tables (runtime pointers, see
 `pokemon-data.md` (not yet published) / `trainers.md` (not yet published)) come from the type-14 module `common_rel` in `common.fsys`, whose prolog fills the table pointers
-(*verified* from its relocations; [fsys-catalog.md](fsys-catalog.md), game-data-tables.md (not yet published)).
+(*verified* from its relocations; [fsys-catalog.md](../colosseum/fsys-catalog.md), game-data-tables.md (not yet published)).
 
 ## FSYS archive format
 
 Source of truth: the game's reader (`src/game/fsys/fsys_file.c`, `gs_range_8017A5FC.c`) checked
 against the disc's archive headers. Community documentation (StarsMmd's
 tutorials, GoD-Tool's Documentation folder) is a cross-reference only; no GPL code is used.
-Big-endian throughout. Full archive list: [fsys-catalog.md](fsys-catalog.md). **How sure:** each field's
+Big-endian throughout. Full archive list: [fsys-catalog.md](../colosseum/fsys-catalog.md). **How sure:** each field's
 evidence is given in its row (code = read from the decompiled reader, disc = holds on every archive on the disc);
 both count as *verified*; *guess* marks the rest.
 

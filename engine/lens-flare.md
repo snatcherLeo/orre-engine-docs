@@ -1,5 +1,7 @@
 # Lens flare (GFL, resource type 17)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **complete** (2026-10-16): format and trigger. Every flare function named here byte-matches the game,
 so the layout and flow are *verified* (read from matching C and checked against the one file on the disc).
 

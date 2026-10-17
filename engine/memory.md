@@ -1,5 +1,7 @@
 # Memory: the GSmem handle heap
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-14). Code: `src/game/gs_mem.c`, header `include/game/gs_mem.h`.
 All 11 functions in `gs_mem` byte-match the game, so **everything under Data structures and Flow is
 *verified*** (read from matching C). Remarks about *why* (design intent) are marked *likely* or *guess* inline.

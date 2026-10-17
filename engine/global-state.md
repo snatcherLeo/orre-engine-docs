@@ -1,5 +1,7 @@
 # Where the game keeps its state
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely** in structure; the addresses are Colosseum's)
+
 Status: **partial** (2026-10-16). A map of the game's global state: for each system, the few globals that
 hold what it is doing, what type they are and where to read more. Names here are **proposed names** (the decomp
 still calls them `lbl_<address>`); the address is given so they can be found. Labels: **verified** (an accessor or a

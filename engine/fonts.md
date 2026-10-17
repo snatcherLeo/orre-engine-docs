@@ -1,8 +1,10 @@
 # Fonts
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-16): file format, layout rules, registration and every font on the US disc are
 decoded; two font ids the text uses are missing from the disc (open questions).
-Related: [messages.md](messages.md) ("Fonts": the first write-up, and how text, fonts and translations fit together).
+Related: [messages.md](../systems/messages.md) ("Fonts": the first write-up, and how text, fonts and translations fit together).
 
 ## What it does
 
@@ -58,7 +60,7 @@ fixed number of files per slot.
    `system_tool`, `pocket_menu`, `name_entry_menu`, `tool_fight`, `fight`, `card_e`, `jis_1`, ...); the room loader's
    type-6 callback `floorReadFontPostFunc` registers it with `GSmsgFontOpen` (*verified*).
 3. **Drawing**: each character is looked up, copied into one of two 512 x 512 I4 textures and drawn as a quad, with an
-   optional shadow or outline pass ([messages.md](messages.md)).
+   optional shadow or outline pass ([messages.md](../systems/messages.md)).
 
 ## Disc data: the fonts on the USA disc
 

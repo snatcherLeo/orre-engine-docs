@@ -1,5 +1,7 @@
 # Textures, shiny colouring and portraits
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-14). Written for shiny colour editing and portrait (mugshot) work: texture formats and where textures live, how a Pokémon
 becomes shiny, and how portraits are stored. Evidence: `GStextureGetGXformat`
 (`src/game/gs_texture_getters_exact_800EF3E0.c`), `GStextureHandle` (`include/game/gs_texture.h`),
@@ -118,6 +120,30 @@ This agrees with StarsMmd's GameCube model addon documentation.
   suffix (Bulbasaur: `body001` = entry 0x0815, `body001_c` = 0x0816, as stored in face[0] / face[1]).
 - Portrait textures are cached in a small most-recently-used list (`fn_8010BD6C`; evicting from
   `poke_face.fsys`, archive id 0x5C0).
+
+### The portrait slots and their load queue (from the code and the first battle)
+
+- **Slots** (`fn_8010C224` sets them up, count given by the caller): each slot holds the face record it shows, its
+  portrait id, a **state** (0 = waiting to load, 1 = loading, 2 = ready), the index of its own 0x6EC0-byte texture
+  buffer, and an optional "next portrait" callback with its argument (**verified** from the code; all of these
+  functions are exact matches of the original).
+- **Requesting a portrait** (`fn_8010AE2C`, used by the battle with no callback): it works out the portrait id from the
+  Pokémon (species, shiny, Unown form), queues it (`fn_8010B16C`) and then **waits, yielding its thread each frame,
+  until that slot is ready** (**verified**).
+- **The queue** (`fn_8010B16C`): if the portrait is already in a slot, it moves to the most-recently-used end;
+  otherwise it takes a free slot, or **evicts the oldest slot** when all are full. Then it starts the load of the
+  first slot still waiting (state 0) through the archive streamer (`fn_8017B000`, archive 0x5C0), unless one is
+  already loading (**verified**). Menus pass a callback that hands out the next Pokémon of a list, so a whole party's
+  portraits stream in one after another (**likely**).
+- **When a load finishes** (`fn_8010B5C4`, called by the archive streamer): the loaded texture is made relative
+  again, copied into the slot's own buffer and set up there, the archive copy is released, the slot becomes ready,
+  and the queue is run again for the next waiting slot (**verified**). This copy step is why a portrait's texture is
+  set up twice (once by the archive, once in the slot).
+- **Why it matters / efficiency:** a fixed number of fixed-size buffers, one load at a time, and least-recently-used
+  eviction keep portraits within a known memory budget and spread disc reads over frames (**likely** the intent).
+- **Open (2026-10-17):** in the PC port (the decompiled code running natively), Willie's battle stops at the trainer intro with the queue spinning on a waiting
+  slot whose portrait lookup returns nothing (the PC build now prints every slot's id, state and lookup result when
+  the queue spins; next run). Not yet known whether a slot's id is wrong or the lookup misses in the PC port.
 
 ## Appearance inventory (every place a Pokémon's look shows up)
 

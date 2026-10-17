@@ -1,5 +1,7 @@
 # Fixed object pools (materials, lights, cameras, gapp tasks)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-14). A pattern used all over the `gs_*` engine, not a single
 subsystem. Code: `src/game/gs_material.c` (GSmaterialCreate, matched), `src/game/gs_light.c`
 (GSlightLoad, matched), `src/game/gs_render_util.c` (`fn_800D27FC`, `fn_800D29A0`),

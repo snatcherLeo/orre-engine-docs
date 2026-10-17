@@ -1,5 +1,7 @@
 # HSD models: reading the geometry (maps, objects, NPCs, battle models)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-16): static geometry in the bind pose, materials' base colour and first texture
 are decoded for every model on the disc; animation (its key format: animation-tracks.md), lighting and the full material / texture-stage setup are not.
 **How sure:** the layouts below come from the decompiled HSD headers and code and were checked by walking every

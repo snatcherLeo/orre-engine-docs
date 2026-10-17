@@ -1,5 +1,7 @@
 # Screen and model effects (GSeffect and the WZX effect types)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-16). How the game runs the visual effects a move asks for (lightning, glow, colour fades,
 after-images, sea and surf, distortion, ...). Read from `gs_effect.c`, `effect_visual.c`, `tracefx.c` and the move
 code that starts them; checked by running every move file in the PC port (the decompiled code running natively) (see "Verified").

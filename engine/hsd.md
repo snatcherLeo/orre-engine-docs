@@ -1,5 +1,7 @@
 # HSD / sysdolphin (scene graph and rendering library)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-15): library role, class system, archives, the description -> object pattern, start-up,
 the render frame, render passes and the port consequences are described; per-class field detail is still thin.
 Code: `src/hsd/` (all but one of its 524 functions matched; the last is an assembly wrapper). Reference: the Melee decompilation (doldecomp/melee,

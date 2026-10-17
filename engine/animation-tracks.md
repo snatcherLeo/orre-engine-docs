@@ -1,5 +1,7 @@
 # Animation tracks (HSD AObj / FObj) and room cameras
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
+
 Status: **partial** (2026-10-14 night). The keyframe format is decoded and verified on every room camera; joint,
 material and light animations use the same format but have not been decoded yet.
 Code: `src/hsd/hsd_aobj_range_801C01C8.c` (AObj, ForeachAnim), `src/hsd/hsd_dobj.c` (FObj load / interpret).

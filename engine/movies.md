@@ -1,5 +1,7 @@
 # Movies (THP video playback)
 
+**Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely** for the player; XD's videos differ)
+
 Status: **partial** (2026-10-17): every video, its sound, the player loop and the hand-off after each video are
 known; the credits' cue table is still to confirm. Code: `src/game/movie.c`; the player itself is Nintendo's THP SDK
 (`src/dolphin/thp/`), wrapped as `GSmovie*`.
