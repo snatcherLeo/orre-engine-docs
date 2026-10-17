@@ -1,0 +1,100 @@
+# Orre Engine Docs
+
+> How Pokémon Colosseum (USA, GC6E01) works under the hood: the engine libraries, the script VM, the disc formats and the game systems, written from the public decompilation and the game's behaviour. CC0: use freely.
+
+Reading guide for AI tools and other readers:
+
+- Every claim carries a label: **verified** = checked against the game's code or its behaviour; **likely** = strongly supported, not checked directly; **guess** = a working theory. Treat only verified claims as facts.
+- The pages build on each other in this order: engine libraries -> script VM -> file formats -> game systems. Read a system page with the library and format pages it links to.
+- Function names, addresses and `src/` paths refer to the public Pokémon Colosseum decompilation; names like `fn_8022EDEC` or `lbl_80478B18` are addresses that have no name yet.
+- "(not yet published)" after a page name marks a page that will come in a later batch.
+- No game data is included: formats and behaviour are described, never dumped.
+
+## Engine libraries
+
+The shared layers everything else uses: the HSD scene-graph library, Genius Sonority's graphics layer, memory, resources, pools, the SDK.
+
+- [HSD / sysdolphin (scene graph and rendering library)](engine/hsd.md): HAL Laboratory's "sysdolphin" library (HSD), also used by Super Smash Bros. Melee.
+- [HSD models: reading the geometry (maps, objects, NPCs, battle models)](engine/hsd-models.md): All 3D models in the game are HSD archives (`.dat`, HAL's sysdolphin format, shared with Melee): room maps (resource type 1), objects and NPCs (type 2), and the model inside each PKX battle model.
+- [Rendering front end (`GSgfx*` / `gfx*`)](engine/gfx.md): Owns the global graphics state, the request buffer that records drawing commands during the frame, the display-list capture, the matrix / projection / light pools, the video mode and frame pacing, and a cache of GX...
+- [Memory: the GSmem handle heap](engine/memory.md): GSmem is Genius Sonority's own heap, layered on top of the Dolphin OS arena.
+- [Resource registry: naming loaded data by (group, id)](engine/resources.md): A small global table that maps a two-part key, `(key1, key2)`, to a pointer.
+- [Fixed object pools (materials, lights, cameras, gapp tasks)](engine/object-pools.md): Instead of allocating each object when it's needed, each system preallocates an array of fixed-size slots at startup and hands out the first free one.
+- [Where the game keeps its state](engine/global-state.md): A map of the game's global state: for each system, the few globals that hold what it is doing, their types and where to read more.
+- [Dolphin SDK (OS, DVD, CARD, ...)](engine/dolphin-sdk.md): The hardware layer: OS (threads, interrupts, reset), DVD (disc reads), CARD (memory card saves), PAD (controllers), GX (graphics), AI/AR/DSP (audio), THP (video).
+- [Crash handler and fatal errors](engine/crash-handler.md): The game installs **its own handler for every CPU exception** and has a printf-style **fatal error** function used by its asserts.
+- [Animation tracks (HSD AObj / FObj) and room cameras](engine/animation-tracks.md): Everything that moves on its own in an HSD scene is animated the same way: a camera flying along a path, a joint rotating, a material scrolling its texture, a light changing colour.
+
+## Script VM
+
+The bytecode that drives rooms, events and cutscenes, and the shared script.
+
+- [Script VM (`cms_*`)](engine/script-vm.md): The game's event and NPC logic runs as bytecode scripts.
+- [The common script (script group 0x0596)](engine/common-script.md): The script that every room shares, kept inside the game's data module: exits, signs, the story mail scheduler and the other functions rooms call.
+- [Story events: what starts them](engine/events.md): A map of every way the game starts something in the field (a cutscene, a battle, a warp, a message, a mail), with links to the pages that hold the details.
+- [Cutscenes (in-engine scenes)](engine/cutscenes.md): How in-engine cutscenes are built: a script function that freezes the player, moves cameras and characters, plays dialogue and music, then hands control back.
+
+## File formats
+
+What is on the disc and how each format is laid out.
+
+- [Disc files (what the player's disc contains)](engine/disc-files.md): What is on the disc (archives, videos, sound banks, GBA programs) and the FSYS archive format the game reads them from.
+- [FSYS archive catalog (USA disc, GC6E01)](engine/fsys-catalog.md): Every FSYS archive on the disc by kind: shared archives, menus, rooms, battle models and move effects, with what each is for and how the game finds it.
+- [Textures, shiny colouring and portraits](engine/textures.md): The game's stand-alone texture format and its GX formats, how a Pokémon becomes shiny (a separate model or a colour change), and how portraits are stored.
+- [Fonts](engine/fonts.md): All in-game text is drawn from bitmap fonts: each character is a small 4-bit greyscale picture, looked up by its Unicode code point and copied into a texture when it is first needed.
+- [Messages and text (`GSmsg*`, `msgctrl*`)](engine/messages.md): All in-game text is looked up by a 32-bit **message key**.
+- [Movies (THP video playback)](engine/movies.md): Plays the game's few prerendered videos: the boot logos, the opening cinematic, the credits and the title-screen attract demo.
+- [WZX: move-effect sequences](engine/wzx.md): A WZX file is one **part of a move's animation** (`_attack`, `_damage`, ...; ball throws, weather and status effects too): a list of timed **entries**, each a particle bank, a model, a screen effect, a sound, a value...
+- [Particles: GPT1 banks and the particle byte-code](engine/particles.md): Every particle effect in the game (room smoke and sparkles, the sleep and freeze loops, move effects, the Pokémon ambient effects such as Charizard's tail flame) comes from a **GPT1 bank**: HAL's HSD particle system,...
+- [Collision (CCD files, GScolsys2)](engine/collision.md): Every room has one collision file (resource type 3, `.col` on the disc, "CCD" in the code).
+- [Lens flare (GFL, resource type 17)](engine/lens-flare.md): A camera lens flare over a battle stage: when the sun (a 3D position set by `flareSetSunPos`) projects near the screen, a row of flare sprites is drawn along the line from the sun through the screen centre, and a...
+- [Screen and model effects (GSeffect and the WZX effect types)](engine/effects.md): Some move-effect entries (WZX entry kind 4, "screen effect") are not particles or models but small programs: an effect with its own state block and up to five callbacks.
+
+## Game systems
+
+Battles, Shadow Pokémon, menus, the field, saves and the story, built on the layers above.
+
+- [The bag, Rui's pocket and the PC](engine/bag-and-pc.md): The bag's pockets and limits, the partner's unused item pocket, and the PC boxes: how items and Pokémon are stored and moved.
+- [Battle engine: abilities (where each one is checked)](engine/battle-abilities.md): An ability is just an id on the Pokémon.
+- [Battle arenas (where every battle takes place)](engine/battle-arenas.md): A battle record names its **arena** (an index into the battle-floor table).
+- [Battle engine: battle setup, move sequences, critical hits and damage](engine/battle-engine.md): A battle is set up from an **encounter** record (who fights, where, which music, which screen transition), runs under a **battle kind** (a set of rule switches: can you run, catch, gain EXP, ...) and a **battle...
+- [Battle engine: held items (where each effect is checked)](engine/battle-items.md): Every item has a **held-item effect id** (item table +0x0A, `itemSoubiDataId`, pokemon-data.md (not yet published)) and a parameter (the item's +0x04 value: the HP a berry restores, Quick Claw's percentage, a type item's boost).
+- [Battle engine: EXP and prize money](engine/battle-rewards.md): When an opponent faints, its EXP is shared among the Pokémon that faced it (and Exp Share holders) and shown with the EXP bar animation and level-ups; Shadow Pokémon bank their EXP instead.
+- [Battle engine: Shadow Pokémon in battle, and the heart gauge](engine/battle-shadow.md): Colosseum's battle engine is Ruby / Sapphire's (battle-engine.md) with a thin Shadow layer on top: one extra move (Shadow Rush), one extra condition (Hyper Mode), one extra action (Call), one extra move check, a...
+- [Battle engine: snagging and catching (the ball throw)](engine/battle-snag.md): Throwing a ball (in Colosseum: a Snag Ball, or any ball with the Snag Machine, at a trainer's Shadow Pokémon) runs the battle-script command at Gen 3's "handle ball throw" number (0xEF, `fn_80213E94`).
+- [Battle targets (`fightTarget*`)](engine/battle-targets.md): Battle code never passes "the attacker" or "the opponent's partner" around as raw pointers to its scripts.
+- [Battle engine: turn order, end of turn, weather, AI scoring](engine/battle-turn-flow.md): Each turn every trainer picks an action.
+- [Battle engine: types and the type chart](engine/battle-types.md): A type is a small number, 0-17, Gen 3's numbering: 0 Normal, 1 Fighting, 2 Flying, 3 Poison, 4 Ground, 5 Rock, 6 Bug, 7 Ghost, 8 Steel, **9 "???"**, 10 Fire, 11 Water, 12 Grass, 13 Electric, 14 Psychic, 15 Ice, 16...
+- [Colosseum challenges (story mode)](engine/colosseum-challenges.md): A Colosseum challenge is a **run of four battles in a row** against different trainers, the last one a boss, with the party healed between rounds.
+- [Evolution: the rules](engine/evolution.md): Each species record has **5 evolution slots** (species record +0x9C, 6 bytes each: kind, parameter, target species; pokemon-data.md (not yet published)).
+- [The field camera](engine/field-camera.md): In a room the camera sits behind and above the player, described by **three numbers**: a **height**, a **distance** and a **yaw** (rotation around the vertical axis).
+- [Field: footsteps and step callbacks (poison, friendship, P★DA mail)](engine/field-steps.md): The overworld has no tile grid, so "a step" is distance: the player's movement work adds up the distance walked, and every **7.0 units** counts as one footstep.
+- [Friendship](engine/friendship.md): Gen 3's friendship rules (pokeemerald's `AdjustFriendship`), with one Colosseum addition for Shadow Pokémon.
+- [GBA link and Pokémon conversion](engine/gba-link.md): Colosseum trades Pokémon with the GBA games (Ruby/Sapphire/FireRed/LeafGreen/Emerald) over the GameCube-GBA link cable.
+- [Sending programs to a Game Boy Advance (the PKJB uploader)](engine/gba-upload.md): The GameCube can boot a GBA over the link cable by sending it a small program ("multiboot").
+- [Memory card tasks](engine/memory-card.md): How saving and loading run as memory card tasks: the task kinds, the read and write paths, and the trade save that writes the card and a GBA together.
+- [Menu rooms: full-screen menus are rooms](engine/menu-rooms.md): A full-screen menu (and, **every battle**: the arena is pushed the same way) is not a window drawn over the field: it is a **room** of its own (a "floor", like a map), with its own resources and scripts.
+- [Message windows (`winMsg*`)](engine/message-windows.md): A message window is an ordinary menu window (menus.md (not yet published)) opened with a message id as its argument.
+- [Name entry](engine/name-entry.md): Name entry is a **menu room** of its own, room 0x390 `name_entry_menu`, pushed on the room stack like the bag or the P★DA (menu-rooms.md).
+- [From power-on to Outskirt Stand: the front-end flow](engine/new-game-flow.md): Every stage of the front end is a **room** in the room table: the logos, the title, the opening movie and the first map.
+- [NPCs (people) in the field](engine/npcs.md): Every character in a room, the player and the partner included, is a **person** in one pool of slots, identified by a **group** and an **index** (the room's characters are one group; the player is group 0, index 100,...
+- [How Rui follows Wes (the partner follower)](engine/partner-follow.md): The field has **two party members**: member 0 (the player, character group 0 index 100) and member 1 (the partner, index 101).
+- [The field pause menu](engine/pause-menu.md): On the field, pressing **Start, X or Y** (key mask 0x1C00, checked by the hero movement code after its events; the button names assume the SDK's pad bit layout: **likely**) opens the pause menu.
+- [The P★DA](engine/pda.md): The P★DA is a **menu room** of its own (room 0x392, `pda_menu`), pushed on the room stack when the player opens it from the pause menu (`menuPdaOpen`; menu-rooms.md, pause-menu.md).
+- [Player movement in the field](engine/player-movement.md): There is no separate "player object" loop: every room's **main-loop script** calls `heroMoveMain` once per pass (room record +0x34; new-game-flow.md step 7).
+- [Region and build differences](engine/regions.md): The game asks two tiny functions which build it is, and branches on the answers.
+- [RNG (random number generator)](engine/rng.md): The game's one shared random number generator (HSD's): its algorithm, how it is seeded from the clock, and what draws from it.
+- [Room changes: links, entry points and arrival](engine/room-changes.md): How the game moves the player from one room (floor) to another: the calls scripts use, the small "link" record that carries the destination and entry point, and what happens on arrival (temporary flags cleared,...
+- [Save data (in memory)](engine/save-data.md): All persistent game state lives in **one contiguous block**.
+- [Screen transitions (fades and battle-entry wipes)](engine/screen-transitions.md): Every full-screen transition goes through one small fade system: plain fades to and from black, and the stylised wipes played when a battle starts (horizontal / vertical bars, a Poké Ball, the "boss" ripple, ...).
+- [The Shadow Pokémon system](engine/shadow-system.md): The whole Shadow Pokémon loop in one place: what makes a Pokémon Shadow, the heart gauge and everything that lowers it, Hyper Mode, how the hidden moves unlock, and every way to purify.
+- [Shops (marts, vending machine, Poké Coupon exchanges)](engine/shops.md): Every shop in the game, from the Outskirt Stand counter to The Under's vending machine and the Poké Coupon exchange, is one record in a small table.
+- [Trading](engine/trading.md): Trading is a full-screen menu room, `pokemonchange_menu` (room 0x394), opened by script command 198 (`std198_menuEnterTradingMenu`).
+- [Where and when trainers are met](engine/trainer-encounters.md): How to find, for any trainer, the room and story point where the player fights them, and how far the US data answers that.
+- [Items placed in the world (treasure)](engine/treasure.md): How the game places items in rooms (treasure boxes, sparkling items on the ground, the Ein Files), how picking one up works, and the one place where the contents are **random**: the Shadow Pokémon Lab's DNA samples.
+- [The TV news](engine/tv-news.md): Watching the TV plays one news broadcast chosen by story progress, then marks it as seen.
+- [Unused and hard-to-see content](engine/unused-content.md): The Cutting Room Floor's list of unused and hard-to-see content in Pokémon Colosseum, checked claim by claim against the game's data and code, plus further finds.
+
+## Optional
+
+- [Bringing a GameCube decomp to life in the PC port (the decompiled code running natively): a playbook](playbook.md): This is how a matched (or nearly matched) GameCube decompilation of Pokémon Colosseum is made to run natively on a PC, one screen at a time, written so another team (an XD decomp, another GameCube port) can follow...
