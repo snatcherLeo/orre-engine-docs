@@ -52,6 +52,50 @@ extra disc's rooms, regions.md). The rest are HSD (`aobj.c`, `cobj.c`, `jobj.c`,
 `mobj.c`, `tobj.c`, ..., hsd.md), the particle system (`generator.c`, `particle.c`, `psdisp.c`, `psinterpret.c`,
 `pslist.c`) and SDK files (`dvd.c`, `vi.c`, ...).
 
+## Names recovered from the assert text (**verified**: strings in the US `main.dol`)
+
+A fatal check prints its **condition as written in the source**, and some messages name the function they come from.
+So the executable keeps a set of original **function, variable, field and constant names** that were otherwise lost
+with the symbols. Only the names are listed here, not the full messages.
+
+**Function names.** Two kinds:
+- **Names that fill gaps** (the original name of a function that had none): `menuCBBios_SaveDataAvailable` and
+  `menuCBBios_GetRegisteredTrainer` (the Battle Mode menus: is there save data, which trainer is registered),
+  `menuCB_GetColosseumBattleTrainerID` (picks the opponent for a Colosseum battle; its message reports an
+  out-of-range index), `GSfloorGetStackPointer` (the room stack depth: Battle Mode asserts it is 0, that is, no
+  pushed room), `GSflagGet` (the story-flag read), `loadParticles` (loads a particle data file), `loadArchivePtr` (an
+  archive load), `unloadBGM` (frees a music resource, reporting a bad sound id) and `_winGetNewWork` (allocates a
+  window's work block). Which address each one belongs to is being traced function by function
+  (**verified** for the names; the address ties are not all made yet).
+- **Names that confirm existing ones** (the decompiled code already used the name, and the message shows it is the
+  original): `_menuPush` / `_menuPop` (the menu stack, depth `m_nMenuStackDepth` in a work block `_CBC`, which asserts on overflow past 8 and underflow, menus.md (not yet published)),
+  `heroBiosGetSexDataId` and `heroCheckValid` (the player record), `winSpriteAdd` (window sprites),
+  `floorReadTexPostFunc` (room texture loading), `cameraWaitSyncAnime` (the camera), `loadParticle`,
+  `GSthreadCreate` and `_msgGetSize` (the message code).
+- The library layers add their own: HSD's `HSD_SetInitParameter` and `hsdIsDescendantOf` (the same names as in
+  Melee, hsd.md), the debugger kernel's `TargetDoStep`, and the SDK's `DVDRead`, `DVDReadAsync`, `DVDSeek`,
+  `DVDChangeDisk` and `DMAErrorHandler`.
+
+**Variable, field and constant names** (from the conditions):
+- **Story state:** `FLAG_system_gamemode`, the flag-variable name of the game mode (variable 0x8AE, pause-menu.md),
+  and `SYSTEM_GAMEMODE_STORY`, its story value.
+- **Battle Mode** (`menuColosseumBattle.c`, save section 14, save-data.md): the work block `_CB` and its fields
+  `m_eBattleMode` (values `BATTLEMODE_COLOSSEUM`, `BATTLEMODE_BATTLEYAMA100` = Mt. Battle), `m_eBattleType` (value
+  `BATTLETYPE_MULTI`), `m_eColosseum` (value `COLOSSEUM_BATTLEYAMA`), `m_aRule`, `m_aTrainerOrg`, and the rule fields `m_nBattleTimeLimit` / `m_nCommandTimeLimit`; the tables
+  `staColosseum` and `staCPU`; the trainer-count constant `CBTRAINER_number_`.
+- **Data ids:** `POKEMON_DATA_null`, `FIGHT_ENCOUNT_DATA_null`, `MSG_ID_dummy` (the "none" values of the Pokémon,
+  battle and message ids) and `SEX_DATA_man` (the player's gender id: a check that the player is male).
+- **Card e** (card-e.md): `CARDE_CARDTYPE_TRAINER`, the trainer states `CARDE_EX_TRAINER_STATE_APPEARING` and
+  `..._ALREADY_BATTLED_WITH`, and a card series' `series_number` and `level_max`.
+- **Other:** `POKECOUPONREFER_INVALID` (the coupon exchange), `pc_items_num` (a check that a PC item storage holds
+  **50 or 30** slots; **likely** the GBA side, since Ruby / Sapphire / Emerald's PC holds 50 items and FireRed /
+  LeafGreen's 30, while Colosseum's own count was not compared), `PS_NUM_LINK` (the particle system's link count), and HSD's frame-buffer states
+  `HSD_VI_XFB_DRAWING` / `HSD_VI_XFB_WAITDONE`.
+
+**Why it matters:** these names are the developers' own vocabulary, so tools and documentation can use them instead
+of invented ones, and they confirm how the code is organised (the `menuCB` Battle Mode family, the `GS` system layer,
+the `_CB` work block).
+
 ## Changing it
 - For the port: route both paths to a host crash log (and a message box) instead of the TV; the report format can stay.
 - The source file names in the fatal calls are a free map from code to original files (useful to decompilers).

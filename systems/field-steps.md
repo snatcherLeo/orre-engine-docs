@@ -23,8 +23,8 @@ the step counter). *Tsure* = "companion": `cbTsureFriend` is the party's walking
 
 **Healing by script** (**verified**, `gs_range_801C766C.c`): script command 216
 (`std216_partyStatusUpdate_8ae(mode)`) heals the whole party (mode 0, the same `fn_801D0AFC` the blackout uses) or
-cures only poison and bad poison (mode 1); it does **nothing while variable 0x8AE is set** (the Mt. Battle challenge run
-of pause-menu.md: no healing between battles there).
+cures only poison and bad poison (mode 1); it does **nothing while variable 0x8AE is set** (the game-mode variable:
+a Battle Mode run, pause-menu.md; no healing between battles there). 
 
 ## Data structures
 

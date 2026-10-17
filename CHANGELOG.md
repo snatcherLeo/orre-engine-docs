@@ -2,6 +2,21 @@
 
 The docs are published in batches. Each entry lists what changed for readers: new pages and notable corrections.
 
+## 2026-10-17: third batch
+
+- New page: **Player appearances** (`colosseum/player-appearances.md`): the places Colosseum shows the player
+  character, and what each one loads.
+- **Names recovered from the assert text** (`engine/crash-handler.md`): function, variable and constant names the
+  game's own error checks reveal.
+- **Item friendship amounts are stored twice** (`systems/friendship.md`): once in the item's parameter record and
+  again in the item record; a change must update both.
+- **Call has no accuracy effect** in Colosseum (`systems/battle-engine.md`, `systems/battle-turn-flow.md`), and much
+  more on battle turns and their order from the first battle playing on the PC.
+- Additions: how script helpers receive their starting values (script-vm); the Card e font as a supplement to the main
+  font (fonts); RNG details (rng); memory and graphics notes (memory, gfx).
+- Corrections: which battles the scripts start and which are still untraced (trainer-encounters); battle 561 is the
+  Card e card battle (card-e).
+
 ## 2026-10-17: second batch (new layout)
 
 - **New layout:** the pages now live in three folders: `engine/` (shared libraries, formats, graphics, memory),

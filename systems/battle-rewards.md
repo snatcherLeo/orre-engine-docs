@@ -38,6 +38,8 @@ EXP-boost rule, 0x27 friendship changes, 0x25 prize money is given, 0x26 money i
    Pokémon only), run the level-up script (`lbl_80378724`: messages, new moves), carry the remainder over.
 
 ### Prize money (`fn_8021E754`)
+Seen working in play after Willie's battle (the PC port
+running the decompiled code, 2026-10-17): the prize message showed (the amount itself was not compared with Dolphin).
 1. Only if the battle kind gives money (rule 0x25) and there is a winner to pay.
 2. `amount = multiplier x class base x highest level x the winner's money factor`, where the class base comes from
    the beaten trainer's class record (`fn_801FBD40`), the highest level is taken over the beaten trainer's Pokémon

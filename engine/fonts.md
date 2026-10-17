@@ -76,6 +76,15 @@ fixed number of files per slot.
 
 Text usage of the font switch (all message banks): font 0: 454 messages, 1: 353, **2: 16, 3: 349, 4: 11**.
 
+**Which level-1 kanji `jis_1` leaves out** (**verified** against the JIS X 0208
+level-1 table, rows 16-47): `jis_1` holds 2,920 of the standard's 2,965 kanji and nothing outside it. The 45 it leaves
+out are among the most common kanji of all (for example 人, 大, 山, 手, 本, 生, 書, 電, 戦, 闘), scattered over the
+rows rather than at the end. 37 of them are in other fonts on the US disc (33 in the main fonts, the rest in room and
+P★DA fonts); 8 are in no font on the US disc (扱, 押, 幹, 源, 説, 謎, 閉, 明). So `jis_1` is **likely** a supplement
+to a Japanese main font that already carries these common kanji, not a complete set by itself: the US main font is a
+reduced one, so on the US disc the Card e room's Japanese text would lack those eight. *Region note:* Japanese-version
+support needs the Japanese disc's main font next to `jis_1` (**guess** until a Japanese disc's fonts are read).
+
 ### Special symbols (code points reused for the game's own glyphs)
 
 Every glyph of every font on the disc (221 fonts, 3,380 code points: the main

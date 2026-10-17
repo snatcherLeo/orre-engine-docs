@@ -151,7 +151,7 @@ None: the save is created at new-game time (`pokemonInitAry`, `sodateyaInit`, `m
   Pokémon record (0x138 bytes) and the item slots are the most valuable layouts to pin down next.
 - Adding data for mods: append a new section rather than resizing one, since many systems compute
   addresses from fixed offsets.
-- XD's save almost certainly uses the same mechanism with different sections (`xd-insights.md` (not yet published)).
+- XD's save almost certainly uses the same mechanism with different sections (`xd-insights.md`).
 
 ## Efficiency
 

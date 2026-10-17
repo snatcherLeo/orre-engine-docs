@@ -472,7 +472,7 @@ partially matched function in `fight_range_80211A00.c`)
   switch logic above runs per Pokémon); then, if the battle allows items, a roll against `ItemValue` (+0x08) decides
   whether it **considers an item** (`fightTrainerAiSelectFightActionItem`, below); (**verified**): a **third roll, against
   `ComboValue`** (+0x06), sends each Pokémon still without an action to a combo step, `fn_8024E534`, which is an
-  **empty stub** in Colosseum (it returns 0 and does nothing; XD reportedly has a full combo system there, per TuxSH, xd-insights.md (not yet published));
+  **empty stub** in Colosseum (it returns 0 and does nothing; XD reportedly has a full combo system there, per TuxSH, xd-insights.md);
   then the Pokémon still without an action are sorted (**likely** by turn order) and each gets the **move
   scoring**. A debug switch (`fn_80008164`) shows each roll's result as a message.
 - **Items** (`fightTrainerAiSelectFightActionItem`; **verified** structure): the trainer's
@@ -483,7 +483,7 @@ partially matched function in `fight_range_80211A00.c`)
   scored for a Shadow Pokémon** (both checks exclude it), so computer trainers don't heal their Shadow Pokémon with
   items. The best score wins, as for moves (*checked 2026-10-16*, **verified** from the C: it first requires some
   item to score above 0, then takes the maximum with random tie-breaks). XD reportedly takes the first usable item
-  instead (xd-insights.md (not yet published), TuxSH's XD write-ups).
+  instead (xd-insights.md, TuxSH's XD write-ups).
 - The AI writes a detailed debug log of its scores (message ids 0x34-0x3B, 0x225-0x228): the developers had a score
   viewer (**likely**; the messages go through the battle's debug message path).
 
@@ -526,6 +526,72 @@ mod can make any trainer smarter by pointing it at another record. **the trainer
 the disc the 820 trainers use values 0-260, 185 distinct, against 261 AI records; 0 means no AI, i.e. a player). A second table, the **AI value add / sub** table (553 x 20 bytes,
 `fightTrainerAiValueAddsubDataBiosGetPtr`), holds the score adjustments the switch logic uses (bad status, the
 incoming Pokémon's ability: `fightTrainerAiGet...AddsubDataId`).
+
+### 8. One turn from move choice to the next turn, in order (a map for the first battle)
+The sections above in the order one ordinary turn runs them, with the function at each step, so a stall or crash can
+be placed quickly. Example: the first battle, against Willie (battle 10, an ordinary trainer battle, kind 2: Espeon and
+Umbreon against his two level-24 Zigzagoon, two Pokémon per side). Each step is **verified** from code unless marked.
+**Also verified by play** (the PC port running the
+decompiled code, 2026-10-17): Willie's battle ran start to finish: both sides sent out two Pokémon, moves, the AI's
+turns and fainting worked, Willie's defeat line and the prize money showed, and the game returned to the field.
+
+1. **Choosing** (`fightActionFlowAllFightTrainerSelectFightAction`, section 1b). For each trainer: Willie's record names
+   an AI record, so the AI chooses (`fn_802342CC`, section 6: it predicts damage by running the real damage steps on
+   saved copies, `fightSeqGetNromalWazaDamage`, battle-engine.md); the player gets the command menu, FIGHT, then the
+   move list, then a target. Each choice becomes an action record in the action FIFO (`gFightActionFifo`, 32 slots of
+   0x30), the target stored as a target id (battle-targets.md).
+2. **Ordering** (`fightActionFlowAllFightOutPokemonDoFightAction`, section 1): the field's Pokémon sorted by action
+   priority, then move priority, then effective Speed (section 2), ties by a coin flip from the RNG.
+3. **Running** (`_fightActionFlowAllFightOutPokemonDoFightActionOneLoop`, section 3): pass 0 (running away only), the
+   move-sequence module re-initialised (`fn_80211A00`), then pass 1 in sorted order. Each action is copied and run
+   through `fightActionFlowFifo`; a Pokémon that has fainted is skipped; the loop stops once a result is set.
+4. **Using a move** (`fightActionFlowFightOutPokemonOutWaza` → `fn_802128D0`, battle-engine.md "How a move picks its
+   script"): the move is re-read from its slot; Encore, two-turn moves and a fainted target are handled (the target
+   is re-chosen); the move's effect id picks its script (`lbl_80379BFF[effect]`), and the script interpreter runs it:
+   the cursor `lbl_8047B610`, one handler per command byte from the 255-entry table `lbl_8027A00C`. **Script bytes
+   hold big-endian 32-bit addresses for jumps and data** (battle-engine.md "Move sequences"), which is where a port
+   must resolve GameCube addresses.
+5. **The attack script** (effect 0, the plain hit; battle-engine.md "A plain attack, step by step"): the move checks
+   (`attackcanceler`), accuracy (0x01, `fightCheckAccuracy`), "X used Y!", PP (0x03), critical hit (0x04), damage
+   (0x05, the formula `fn_80232110`), type effectiveness and STAB (0x06, `fn_802274F0`), damage variance (0x07,
+   `fightApplyDamageVariance`), then the animations and waits (the move's WZX sequence: wzx.md), the HP bar, the
+   critical / effectiveness messages, the HP written (`datahpupdate`), the secondary effect (0x15, `fn_80224820`),
+   the faint check for the target (`tryfaintmon`), the end-of-move steps (0x49, `fn_8021FAD4`), end.
+6. **A faint inside the move** (command 0x19, `fn_80224158`, Gen 3's `tryfaintmon`: the faint itself, with the
+   friendship change below; then, run separately, the two-command scripts `lbl_80378721` = **getexp (0x23) only** and
+   `lbl_80378798` = **checkteamslost (0x24) only**, both **verified** from their bytes, battle-engine.md "The first
+   battle's scripts"; where the faint message and animation are played inside 0x19 is **likely**, not traced): **EXP** for the winning side (command 0x23, `fn_802232F4`:
+   battle-rewards.md; levels, new moves and the "level up" flag that triggers evolution after the battle);
+   **friendship** for the fainted player Pokémon (events 6 / 8: friendship.md); then **command 0x24, `fn_80222C44`**
+   (Gen 3's `checkteamslost`): if side 1 (the opponent) has no usable Pokémon left, the result becomes **2, the host
+   side wins**; if side 0 has none, **3**; with neither, it schedules the send-in check `fn_80222EF0`.
+7. **The next action** runs (back to step 4 for the next Pokémon in order), unless a result is set (step 3).
+8. **End of turn** (`fightActionFlowOneTurnPost` → `fightSeqPost` → `fn_80213270`, section 4): messages closed, the
+   per-Pokémon turn checks, side timers and weather, damage and healing by condition, **faint handling**
+   (`fn_8022FE80`, then the switch-in effects for any replacement: Intimidate, Trace, held items, Forecast), Future
+   Sight, Perish Song, then the turn counter and a new turn random.
+9. **Replacing a fainted Pokémon.** *Choosing* (script command 0x50, `fn_8021F24C`, Gen 3's `openpartyscreen`; 6 bytes:
+   a target id and a jump address): nothing happens if a replacement is already chosen (status 0x119); if the trainer
+   has nothing left to send (`fn_801F8A18`), the script jumps to the given address; otherwise
+   `fightTrainerSelectIrekaeFightPokemon` asks the same way as choosing actions (step 1): the AI
+   (`fightTrainerAiSelectIrekaeDasuFightPokemon`) for a trainer with an AI record, the player's party menu
+   (`fightMenuFightTrainerGcHeroSelectIrekaeFightPokemon`, or the GBA version) otherwise. The choice is stored as the
+   fainted Pokémon's **switch target** (status 0x121, `IrekaeTargetEntryId`, the same field a normal switch uses), with
+   0x119 set and floor status 0x45 pointing at it; a link error (-2) ends the battle with result 1. *Sending in*
+   (`fn_80222EF0`): for each field slot whose Pokémon is no longer out: if a switch target is recorded, the slot's
+   roles are set (floor status 0x45 switching out, 0x46 fainting) and
+   the send-in script `lbl_8037879E` runs; with none, the slot is cleared and the battle grid updated. Willie has no
+   third Pokémon, so his slots empty as they faint (**likely**, from his two-Pokémon party).
+10. **Back to choosing** (step 1), or, once a result is set, **the end of the battle** (section 0, step 4): the
+    "Syuuryou" actions, prize money (command 0x5D, `fn_8021E754`: battle-rewards.md), the after-battle steps
+    (`fightActionFlowSyuuryouPost`: evolution checks, Pickup, the party written back to the save for story kinds),
+    the fade-out, and the return to the field, where the room script reads the result (`std103_battleGetResult`,
+    script command 103) and continues: for Willie, story flag 990 (new-game-flow.md, story-route.md (not yet published) step 11).
+
+Where each kind of work happens, for a crash report: **choices** in the menu and AI code (step 1); **numbers**
+(damage, accuracy, Speed) in plain C functions called from script commands (steps 2, 5); **text and animation** in
+script commands that wait on the message and WZX systems (step 5); **state changes** through the `*SetStatus`
+functions (floor, side, trainer, Pokémon, by status id: section "Per-Pokémon status ids" and battle-targets.md).
 
 ## Disc data
 

@@ -87,6 +87,7 @@ apply to XD too; the game-specific pages (battles, story, scripts) describe Colo
 - [FSYS archive catalog (USA disc, GC6E01)](colosseum/fsys-catalog.md)
 - [Region and build differences](colosseum/regions.md)
 - [Card e: the Virtual Capsule room (Japan-only content left in the US build)](colosseum/card-e.md)
+- [Player appearances (where the player is shown)](colosseum/player-appearances.md)
 
 ### Porting playbook
 

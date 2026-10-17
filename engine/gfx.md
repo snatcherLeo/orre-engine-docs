@@ -169,6 +169,30 @@ ends one directly (unlocks the image, frees the slot). This is how screen fades 
 and the title screen get the previous frame as a texture (blurs, wipes, freeze frames: likely, from the callers).
 In the PC port the slots hold pointers, so the slot table is larger and must be declared with its struct type.
 
+### Menu model pictures: a 3D character drawn into a texture 
+
+Menus that show a 3D character next to a window (the name entry's player, the P★DA, the field TV) do not draw the
+model into the scene. They render it into a texture and draw that texture as a flat picture (**verified** in the PC port
+from logs and a readback of the texture, name entry, 2026-10-17):
+1. **Set-up** (`menuModelInit`): a texture the size of the picture (the name entry's is 256 x 480, RGBA8, so the
+   picture keeps an alpha channel around the character), a camera and up to three lights. Their start values come from
+   a small table of floats (two white lights, a grey ambient of 80, a light position). The model is loaded hidden: it
+   never appears in the normal 3D pass.
+2. **Every frame** (`menuModelRender`): switch the frame target to the texture, set the viewport and scissor to its
+   size, make the menu's camera active, switch on its lights, apply a pixel-engine descriptor to the model's materials
+   (alpha blending; an alpha test that keeps only pixels with alpha above 0; depth test and depth writes on), draw the
+   model, copy the result into the texture (clearing behind the copy), then restore the camera, viewport, lights and
+   materials. HSD's framebuffer format is switched to RGBA6_Z24 for this pass so the copy carries alpha.
+3. **Drawing the picture**: the window's draw callback (for the name entry `menuNameEntryBackDrawHumanModel`) draws
+   the texture as a two-corner rectangle (primitive 7), blended by its alpha, so only the character covers what lies
+   behind.
+
+The name entry shows a mode-2 window (naming a Pokémon) without a model: the callback returns early for it.
+
+*Port note (2026-10-17, open):* in the PC port the render and the copy work (the texture holds a correct picture of Wes)
+and the menu loads that texture, but the name-entry screen still shows black where the picture should be; every piece
+of the path also works in isolation in the HSD test. Port-gaps 23.
+
 ### Request-buffer commands (groups and formats verified from `gfxPlayCommands` and the recording setters; the
 exact meaning of some entries, such as the packed colour forms and the matrix-stack operations, is likely)
 

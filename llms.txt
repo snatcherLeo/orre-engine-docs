@@ -90,6 +90,7 @@ Colosseum's own content: its story start, challenges, partner, TV news, trainers
 - [FSYS archive catalog (USA disc, GC6E01)](colosseum/fsys-catalog.md): Every FSYS archive on the disc by kind: shared archives, menus, rooms, battle models and move effects, with what each is for and how the game finds it.
 - [Region and build differences](colosseum/regions.md): The game asks two tiny functions which build it is, and branches on the answers.
 - [Card e: the Virtual Capsule room (Japan-only content left in the US build)](colosseum/card-e.md): The e-Reader Colosseum-e card battle hall in Phenac City: room, menu, battles and e-Reader program are on the US disc, but nothing leads into the room.
+- [Player appearances (where the player is shown)](colosseum/player-appearances.md): Every screen, cutscene, menu and model slot where Colosseum shows the player (Wes), with what each one loads: the checklist for player avatar packages.
 
 ## Porting playbook
 

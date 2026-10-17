@@ -51,7 +51,10 @@ scaled x 150 / 100 by the Soothe Bell (effect 27) and gets +1 for the Luxury Bal
 Candy, PP Up and PP Max raise it by 5 / 3 / 2; the battle items X Attack, X Defend, X Speed, X Accuracy, X Special,
 Guard Spec. and Dire Hit by 1 / 1 / 0; the bitter herbal medicines lower it: Energy Powder and Heal Powder by
 5 / 5 / 10, Energy Root by 10 / 10 / 15, Revival Herb by 15 / 15 / 20. No other item carries an amount. The amounts are
-three signed bytes (+5 to +7) in the item's parameter record, which the item record's byte +0x04 selects.
+three signed bytes (+5 to +7) in the item's parameter record, which the item record's byte +0x04 selects. The item
+record itself also holds the same three values at +0x24 (pokemon-data.md (not yet published) "Item entry"; identical for every item
+checked: **verified**), but the item-use code reads the parameter record, so a mod must change both copies together
+(**verified** that the use code reads the parameter record; whether anything reads +0x24 is not traced).
 
 **Status ids used** (per-Pokémon status, battle-turn-flow.md): 0x99 friendship (0-255), 0xC2 "is Shadow",
 0xC7 the Shadow friendship pool, 0x73 the ball it was caught in, 0x6E species, 0x7B fainted, 0x70 / 0xB6 / 0xB8 validity

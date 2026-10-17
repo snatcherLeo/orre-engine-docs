@@ -33,7 +33,7 @@ Handle to entry is plain arithmetic (*verified*): `entry = tableTop - (handle - 
 **`GSmemBlock`**: free-list node written into the free memory itself: `prev`, `next`, `size`.
 The free list (`lbl_8047AB30`) is kept sorted by address.
 
-**Globals:** `lbl_8047AB28` = heap mode/id passed to `GSmemInit` (1 = debug guards on);
+**Globals:** `lbl_8047AB28` = the guard mode passed to `GSmemInit` (1 = debug guards on; the game passes 0);
 `lbl_8047AB2C` = fit policy (first / best / worst, set by `fn_800E3560`);
 `lbl_8047AB34` / `lbl_8047AB38` = top and current bottom of the entry table;
 `lbl_8047AB3C` = last error code (1 bad handle, 2 out of memory, 3 no entry, 4 lock overflow,
@@ -57,6 +57,20 @@ The free list (`lbl_8047AB30`) is kept sorted by address.
 - Free: `fn_800E209C(handle)` warns if still locked, checks guards and checksum, inserts the block
   in the address-sorted free list, and merges it with free neighbors on both sides.
 - Reverse lookup: `fn_800E202C(ptr)` scans the table for the handle that owns a data pointer.
+
+### Boot memory split
+At boot (`main.c`) the
+game divides the console's free memory (the arena) in two, with **fixed numbers in code** (**verified** by reading
+the code and the arithmetic):
+- **GSmem gets a fixed 14.5 MB** from the bottom of the arena: `GSmemInit(0, arenaLo, arenaLo + 0xE80000)`. This is the
+  only GSmem heap, and the first argument (0) is the guard mode, debug guards off.
+- **The SDK heap gets the rest** (`OSInitAlloc` over `[arenaLo + 0xE80000, arenaHi)`), and **HSD allocates from it**
+  (hsd.md).
+- On the console the arena is `0x8048E740`-`0x817F0560` (**verified** in Dolphin: its bottom is the stack top rounded,
+  its top just below the disc's file table), so the SDK heap is **3,628,544 bytes**. The boot log line "OS avail
+  memory: %d" prints that heap's free bytes (3,624,320 in Dolphin).
+- Consequence: more GSmem for a mod means less SDK heap (and so less room for HSD), because the split is a constant,
+  not a calculation.
 
 Names used in the decomp's header: GSmemAlloc = `fn_800E2C04`, GSmemAllocRaw =
 `_toolentryAlloc__FUl`, GSmemGetPtr = `fn_800E27B0`, GSmemLock = `fn_800E24B0` (it actually
@@ -97,4 +111,3 @@ blocks; see [resources.md](resources.md) for how loaded data gets named.
   `fn_800E2C04(size, alignment)` in that order. Either its parameters are misnamed or one
   prototype is wrong (open).
 - What sets `lbl_80478AF0` (zero-fill on allocate)?
-- How many separate GSmem heaps exist (is `heapId` a mode or really an id)?

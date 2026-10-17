@@ -158,7 +158,7 @@ the floor table, game-data-tables.md (not yet published)), and every prefix maps
 | M4 | 5 | The Under (includes the Under subway) | bottom_colo, cylinder_colo, subway, junk, kanpo, labo, train, hotel | verified |
 | D1 | 6 | Shadow Pokémon Lab | garage, labo | verified |
 | D2 | 7 | Mt. Battle | cloud, crater_colo, magma, valley, rest_1..9, present_room, pc | verified |
-| D3 | | (none on the disc) | | **skipped**: probably a dungeon cut during development (*guess*). In XD the D3 prefix is reused for the S.S. Libra (xd-insights.md (not yet published)). |
+| D3 | | (none on the disc) | | **skipped**: probably a dungeon cut during development (*guess*). In XD the D3 prefix is reused for the S.S. Libra (xd-insights.md). |
 | D4 | 8 | Realgam Tower | tower, dome_1..11, casino_colo | verified |
 | S2 | 10 | Team Snagem Hideout | bossroom, building, hallway, snatchroom, out | verified |
 | T1 | 9 | a stand-alone Colosseum battle arena (Orre Colosseum most likely) | ancient_colo | decided from the code, see below |

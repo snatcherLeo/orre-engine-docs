@@ -21,7 +21,12 @@ RNG-manipulation tools (PokeFinder) depend on it.
   follows the console clock: seed = low 32 bits of (seconds since 2000-01-01 x 40,500,000, the time-base rate, + about 40,381,700); with the
   clock at the GameCube epoch the seed is 0x02682D0F. Nothing draws from the RNG before the title / main menu. *For the
   port:* vanilla replays inject the captured seed; normal play seeds from the real clock.
-  Which function calls it is open; it runs about 1 s after boot.
+  **Who seeds, and reseeding** (**verified** from the code): the seed is set
+  **once**, during graphics start-up: `GSgfxInit` → `GSmathInit` → `fn_800E0C78`. **Nothing reseeds mid-game**: the
+  only other code that writes the seed pointer is HSD's forget-memory hook (`_HSD_RandForgetMemory`), which runs only
+  from `HSD_InitComponent` (also called once by `GSgfxInit` at boot) and only moves the **pointer** back to its static
+  home (`lbl_80478C90`) if it pointed into freed memory, never the seed value. After boot the state changes only by
+  being drawn from.
 
 ## Who calls it
 
@@ -83,7 +88,7 @@ Shadow Pokémon PIDs against the **player's** ID and **rerolls any that would be
 lock"). Each reroll is one more PID candidate = **2 RNG calls** (high and low 16 bits), as in
 Colosseum's loop. To find in XD: the counterpart of `pokemonCreateRndFit` and its Shadow caller, and
 whether the reroll is the same `shinyMode 0` path with the player's ID passed in. Recorded in
-`xd-insights.md` (not yet published).
+`xd-insights.md`.
 
 ## Port notes
 
@@ -93,7 +98,9 @@ whether the reroll is the same `shinyMode 0` path with the player's ID passed in
 
 ## Open questions
 
-- Who calls the seeding function and when; whether anything reseeds mid-game.
-- The per-frame RNG consumers in the overworld (particles per room, NPCs, cameras).
-- From the shiny-Shadow-Pokémon section: which story flag each Shadow entry uses for "PID already made"
-  (Shadow table field `flag16`), and XD's counterpart.
+- The per-frame RNG consumers in the overworld (particles per room, NPCs, cameras): to measure against Dolphin in the
+  golden slice.
+- From the shiny-Shadow-Pokémon section:
+  The "PID already made" flag is the Shadow record's +0x16 (`fn_801EE8F4` reads it): story flag **1357 + n** for Shadow
+  id n (1358-1453, one per Shadow slot, **verified** from the code and the US Shadow table). Still open: XD's
+  counterpart.

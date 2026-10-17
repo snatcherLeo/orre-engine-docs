@@ -45,6 +45,8 @@ possible, a checker that finds the next case before it crashes.
 | **Thread-layer state that assumes one caller** | the GameCube runs some engine threads from an interrupt, on whatever stack was interrupted; a PC replacement that keeps one global "scheduler" context breaks when that happens: a thread yielded into another thread's stack, the scheduler's idea of the current thread went stale, and a movie decoder ran past its own suspend and read past the movie (verified) | keep such state per thread (each thread returns to the context that ran it); decide "inside a thread" from the running context, not a global | an assert at every context switch that the running stack belongs to the thread the scheduler thinks is current (cheap, silent until it fires) |
 | **Game callbacks on a real host thread** | the audio mixer runs the game's stream callbacks on its own OS thread; a callback that sends a message wakes a game thread, and a scheduler that switches right away does it on the wrong OS thread: from then on stacks are saved under the wrong thread and threads resume in the wrong places, here a movie decoder past its own suspend, about one boot in three (verified with an event trace; it happened in every boot, the crash only when the timing was unlucky) | only the game's OS thread switches; a wake from any other thread leaves a pending reschedule that the game thread takes at its next interrupt point (what the console does when the interrupt ends) | a one-time log line whenever another OS thread wakes or blocks a game thread |
 | **Relocations the splitter inferred on data that is really numbers** | data words that happen to look like code addresses (a menu command 0x80030000 inside a 0x8002xxxx function) carry a relocation; harmless on the GameCube (the linker writes back the same value), wrong in the PC port (the startup relocation writes a PC address there): menu cards skipped their start offset and slid into each other, font glyph words became garbage (verified) | restore the original value (target + addend) as plain big-endian bytes for that symbol and drop its relocations; the objects are RELA, so the bytes at the site are zero and simply dropping the relocation is wrong | relocations into the middle of a function (non-zero addend on a function symbol) are almost never real pointers in data |
+| **Textures the CPU rewrites, never re-uploaded** | text drawn into a glyph atlas on the CPU: every window kept showing the first message's letters (verified) | the GameCube invalidates its texture cache after a CPU write; a PC renderer that caches textures by object needs a new version or a re-hash at that point (here: re-initialise the texture object's data pointer after each unlock) | look for CPU writes between a texture lock and unlock |
+| **Bit-fields over GameCube-order bytes** | the GameCube compiler fills a byte's bit-fields from the top bit, GCC on x86 from the bottom: a room character shown by a script set bit 0 while the loader read bit 7, so a truck stayed invisible though its shadow drew (verified) | make the struct a big-endian view (`DISC_STRUCT`): GCC then lays bit-fields out from the top bit too; or replace the bit-field access with masks | list every native struct with bit-fields and check whether its bytes come from the disc, a save or a mask-reading neighbour |
 | **Generated stubs and x86 traps** | a logging stub for an allocator corrupted the free list; integer division by zero traps on x86 where the GameCube returned a value | replace the stub with the real function; guard the division | crash reports name the function |
 | **Byte-count copies of pointer groups** | a registration routine copied 0xC bytes (three GameCube pointers) into three native 8-byte pointers: the third (the state-size callback) stayed NULL and the game crashed at the first battle's save of the room state (verified: the next playtest got past it) | copy `n * sizeof(void*)`, and make every caller pass real pointers (callers that copied the pointers out of a 32-bit data table must convert each cell) | search for `memcpy` / `memset` with literal sizes into structs that hold pointers |
 | **Pointer arrays filled as 4-byte cells** | the caller declared `void* list[6]`, the callee (still written with 32-bit addresses) stored 4-byte cells into it, so the caller read two cells glued into one pointer and crashed at the first battle's team selection (verified: the next playtest got past it) | declare the caller's array `u32 list[n]` in the PC port and convert each cell with `PC_PTR` | look for pointer arrays passed to functions that index them `base + i * 4` |
@@ -88,6 +90,20 @@ possible, a checker that finds the next case before it crashes.
   probes. What worked: a silent in-memory ring of the last few dozen scheduler switches plus a cheap consistency check
   that dumps the ring only when it fails; short repeated runs (30 seconds) with the same settings as the run that
   crashed; and judging a fix by the crash rate over several runs, labelled "likely" until it has held for a while.
+- **A log file for every run, with a build stamp:** testers launch the port by hand and the console vanishes on a
+  crash, so every run writes its own log file (a copy of everything printed, flushed as it goes, the newest 20 kept),
+  and the first line, the window title and every crash report name the exact build (commit, uncommitted changes, build
+  time). The crash report also gives the last room and frame. Asking "which build, where were you" stops being a guess.
+- **Prototype scanner:** compares every hand-written `extern` in the decompiled code with the real prototype of the
+  platform library it calls (pointer / 64-bit / float parameters, anything past the 4th argument). It found the two
+  stack-argument crashes of this kind and one more waiting to happen; simple text matching, so it has false positives
+  inside console-only `#if` blocks. It now compares against the decompiled code's own
+  definitions too, skips console-only blocks, and ends with a short list of declarations that pass fewer arguments
+  than the function takes and are actually called (the callee then reads leftover registers): 6 of 170 findings.
+- **Audio dumps and comparison:** the port writes its mixed output to a WAV file on request, and a small tool lines it
+  up with the emulator's audio dump by loudness envelope, then reports the offset, the level difference and clipping
+  on both sides, and the moments where they differ most (where to listen). A sound that plays on one side only shows
+  up as a large local difference.
 - **Repeatable routes:** scripted button sequences that must reach a given screen (title, memory card, top menu, new
   game) with pass / fail from the log, re-run on every new build as regression checks.
 - **Dolphin comparison:** the same moment in the emulator and the port, side by side (scripted Dolphin with memory
@@ -129,6 +145,18 @@ possible, a checker that finds the next case before it crashes.
   early returns before fixing anything.
 - Run the port from a scratch folder, not the repository, so frame dumps and logs never get committed; the folder
   then needs the executable's libraries on the search path.
+- Debug shortcuts skip setup the game does along the normal path. A save-state style "checkpoint" loaded right after
+  boot skipped the title screen, which loads sound groups the battles need, and the battle lost its cries. Let
+  shortcuts wait until the normal boot has passed the screens that set things up, and compare a failing run's path
+  with a working one's before suspecting the code.
+- A game's warning can be routine: "Forced termination SE" in this game's sound status check also appears when an
+  effect simply ended. Add your own log at the point of failure (here: the sound library's start function saying
+  why an effect did not start) instead of reading meaning into the game's messages.
+- Changing the memory layout changes what is left over, not only where things are: moving to the console's own arena
+  bounds left the system heap with the console's free space (2.6 MB instead of 8.4 MB). Count heap peaks and failed
+  allocations right after such a change; a structure that grew in the PC port fails there first.
+- Mark test windows: start automated runs minimized and give test builds a distinct title, so nobody plays the
+  wrong window.
 
 ## 6. What carries over to XD
 

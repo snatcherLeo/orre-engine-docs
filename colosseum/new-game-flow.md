@@ -4,8 +4,12 @@
 
 Status: **partial** (2026-10-16). The chain of rooms and calls the game goes through from boot to the first
 map of a new game, and to the saved room on Continue.
-**Verified** from the decomp's C (room changes, menu calls) and the disc's room and archive tables unless marked; not
-watched running. Room names are the rooms' archive names (menu-rooms.md).
+**Verified** from the decompiled C (room changes, menu calls) and the disc's room and archive tables unless marked.
+**Also seen in play** (the
+PC port running the decompiled code, 2026-10-17): the logos, title, START, memory card, top menu, New Game, name entry,
+the opening movie, Outskirt Stand (walking, doors, the TV news, the grunts' scene) and Willie's battle and after-battle
+scene ran end to end; Continue, Battle Mode and Options were not part of that run. Room names are the rooms' archive
+names (menu-rooms.md).
 
 ## What it does
 
@@ -93,6 +97,25 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
      saves the options with `fn_801D0748(7, 2, 0)`. (Only option 9 is compared there; how the sound mode is stored, as
      save-header option 10 or not at all, is not traced.)
    - Anything else -> back to the title room (0x384).
+
+   **How the top menu's entries are defined** (**verified** from the menu tables in `main.dol` and `fn_800210F0`
+   unless marked). Part data, part code:
+   - **Layout is data:** menu 0xAA is a record in the menu table (menus.md (not yet published)), whose item chain holds four
+     non-selectable panels (items 0x90E-0x911, each drawing a sprite: the background frames) and **six selectable
+     entries** (items 0x912-0x917: screen position, size and the shared draw callback `fn_80020F54`). An entry's
+     choice value is its place in that chain (0-5). The items carry no message keys, so the entry labels are not
+     text from the message banks (**likely** drawn as part of the sprites; not traced).
+   - **Help line is data:** while the cursor rests on an entry, `fn_80020EA4` shows a one-line description from a
+     table of message ids indexed by the choice (`lbl_802E4ED8`; the Options screen has its own table,
+     `lbl_802E4EF0`).
+   - **What each entry launches is code:** a fixed `switch` on the choice in `fn_800210F0`: New Game (the menu call
+     returns 0) -> the confirmation, name entry, save creation and room 0x3A0; 1 Continue -> the save's return point;
+     2 / 3 -> `menuColosseumBattle(0)` / `(3)` and room 0x395; 4 -> the Options screen (`fn_80020C9C`); any other value
+     (the sixth entry, or cancel) -> back to the title room 0x384 (**likely** the sixth entry is "back"; its label not
+     checked).
+   - So a mod can move or restyle entries and change their help text by data, but a new entry, or a new target for an
+     existing one, needs a new case in that `switch`.
+
 6. **Opening movie** (room 0x3A0): `movieOpeningStart` fades, opens `movie/openingdemo.thp` and starts its song
    (0x495); `fn_80035E04` plays it with five frame-keyed sound cues, then writes story flag 0x8D0 and
    **`floorLink(1, 0)`**: room 1, **`S1_out`, Outskirt Stand**, entry point 0. It also sets the room change's fade

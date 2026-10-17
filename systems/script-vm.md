@@ -54,6 +54,13 @@ symbols: `cms_op03_pop`, `cms_op05_return`, `cms_op18_negate`, `cms_op19_pushVar
   jumps to `base + header.functionOffsets[index]`. The script file header has the **function count**
   at +0x04 (u16) and the **offset table** at +0x18 (u32 per function); an index past the count logs
   an error.
+- **Starting values for locals** (**verified** in Realgam Tower's Colosseum script): since the
+  frame starts below the locals, the caller can give a function its locals' first values by pushing them just
+  before a call with no arguments. Realgam Tower's Colosseum pushes two battle numbers and a story flag, then calls a
+  helper with argument count 0 and local count 3; the helper reads them as its locals 0, 1 and 2 (it starts the
+  first battle while the flag is clear, the second once it is set). This is how the scripts pass values to helpers
+  without arguments; a listing that ignores it shows such calls as taking nothing, and a leftover value as a
+  `return` value.
 - `return` (05) pops the local count, the saved frame and the return address, then drops that many
   locals. A return address of 0 means the script's top level returned: state = 3 (finished).
 - `callStandard` (37) calls a numbered native `stdNNN` (the `std*_...` functions across `src/game`).
