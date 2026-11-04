@@ -4,7 +4,7 @@
 
 Status: **partial** (2026-10-16). How the game sends a program to a GBA plugged into a controller port,
 so the GBA can act as a second screen or controller without a cartridge. The original source file name survives in
-the executable's strings: `pkjb_uploader.c`, prefix **PKJB**. Code: `fn_80073E8C` (`PKJB_Prepare`, in
+the executable's strings: `pkjb_uploader.c`, prefix **PKJB**. Code: `pkjbPrepare` (0x80073E8C) (`PKJB_Prepare`, in
 `menu_range_8007109C.c`) and the transfer helpers (`pkjb_candidate_80071AE4.c`, `menu_candidate_80074324.c`).
 **Verified** from the code unless marked; nothing was watched running. For the rest of the GBA link (trading and
 battle-mode parties from the GBA games) see gba-link.md.
@@ -32,12 +32,11 @@ program and the program can tell which GameCube game sent it (**likely** the pur
 they are GBA programs. `colbtl.bin` is named in `menuGBAC.c`, the battle-mode GBA code: **likely** the program a GBA
 runs when used as a controller in battle mode (the menus accept a GBA as input on any port, global-state.md).
 `pkjb_test.bin` is **likely** a developer test program. `coupon.bin` (59,964 bytes) is a third GBA program (valid header), but its name does not
-appear in `main.dol`'s strings (**guess**: sent by another code module, perhaps the coupon features of
-`menuExDiscCoupon.c` / `menuPokeCoupon.c`, or unused). The three `bg0/1/2thumbcode.bin` files have no GBA header:
+appear in `main.dol`'s strings; what sends it is open. The three `bg0/1/2thumbcode.bin` files have no GBA header:
 they are the payload of the second kind of upload (below).
 
 ## Flow (`PKJB_Prepare(pathA, pathB)`)
-1. Read the disc id's game code (`fn_800A7BCC`) and set its case bits; initialise the GBA library (`GBAInit`).
+1. Read the disc id's game code (`DVDGetCurrentDiskID` (0x800A7BCC)) and set its case bits; initialise the GBA library (`GBAInit`).
 2. Open and read program A (error "PKJB_Prepare: not found" / "empty or too big size" over 128 KB / "read error").
 3. **Stamp** the 4-byte code into the GBA header's game-code field (0xAC-0xAF) and recompute the GBA header
    **complement check** at 0xBD: 0xE7 minus the sum of bytes 0xA0-0xBC (the GBA BIOS refuses a program whose check
@@ -46,20 +45,19 @@ they are the payload of the second kind of upload (below).
 5. The transfer helpers then send the image per port in blocks (command 0x22 and friends), checking the GBA's replies
    and keys (`_PKJBUpValidateKeyB: invalid key` messages).
 
-## The second kind of upload: a payload for a GBA game (`fn_8007B114`, `fn_8007B350`)
-(**verified** from the code; what the payload does is **likely** / **guess** as marked):
-- `fn_8007B114` builds the checksum table (`gPkjbCrcTable`), then picks **one of the three `bg0/1/2thumbcode.bin` files
+## The second kind of upload: a payload for a GBA game (`gbaBootLoadImage` (0x8007B114), `gbaBootStartThread` (0x8007B350))
+(**verified** from the code; what the payload does is **likely** where marked):
+- `gbaBootLoadImage` (0x8007B114) builds the checksum table (`gPkjbCrcTable`), then picks **one of the three `bg0/1/2thumbcode.bin` files
   at random** (`OSGetTick % 3`, names from the table `lbl_802EE608`), allocates a buffer (`gMenuLoadedBuffer`,
   size `lbl_8047A650`), reads the file into it **after a 0x34-byte header gap** and zero-pads the end; `lbl_8047A64C`
   marks it loaded.
-- `fn_8007B350` ("prepare the GBA upload context and worker") fills that header: the GBA device code (4 bytes), a
+- `gbaBootStartThread` (0x8007B350) ("prepare the GBA upload context and worker") fills that header: the GBA device code (4 bytes), a
   **4-letter code chosen by region: "PSAJ" for Japan, "PSAE" otherwise**, a name copied in at +4, a variant byte at
   +0x29, and a checksum over the data with the table; then starts a worker thread for the transfer.
 - So these files are not multiboot programs (no ROM header) but THUMB code for a GBA running the **e-Reader**: the
   link program of the **Card e battles** (**verified**: the call is made through `std200_gbaConnectEvent` in room
   `M1_carde_1`, whose dialogue speaks of linking with the e-Reader). "PSAJ" / "PSAE" is the Card e Reader+ game
-  code. Why there are three variants picked at random is not known (**guess**: three builds of the same payload, to make copying or
-  patching the transfer harder).
+  code. Why there are three variants picked at random is not known.
 
 ## Disc data
 Root files `colbtl.bin`, `pkjb_test.bin`, `coupon.bin`, `bg0thumbcode.bin`, `bg1thumbcode.bin`, `bg2thumbcode.bin` (disc-files.md).

@@ -16,7 +16,7 @@ plus a small extra font each room or menu brings along with just the extra chara
 
 ## Data structures
 
-**Font file** (*verified*, from the glyph lookup `_msgGetCodeInfo`, the copy routine `fn_800FD69C` and `GSmsgFontOpen`,
+**Font file** (*verified*, from the glyph lookup `_msgGetCodeInfo`, the copy routine `_msgMakeTexture` (0x800FD69C) and `GSmsgFontOpen`,
 src/game/gs_msg.c): a list of fonts, ended by font id 0xFFFF (a font whose size field is 0 runs to the end of the file).
 
 | Offset | Size | Field |
@@ -82,8 +82,13 @@ out are among the most common kanji of all (for example 人, 大, 山, 手, 本,
 rows rather than at the end. 37 of them are in other fonts on the US disc (33 in the main fonts, the rest in room and
 P★DA fonts); 8 are in no font on the US disc (扱, 押, 幹, 源, 説, 謎, 閉, 明). So `jis_1` is **likely** a supplement
 to a Japanese main font that already carries these common kanji, not a complete set by itself: the US main font is a
-reduced one, so on the US disc the Card e room's Japanese text would lack those eight. *Region note:* Japanese-version
-support needs the Japanese disc's main font next to `jis_1` (**guess** until a Japanese disc's fonts are read).
+reduced one, so on the US disc the Card e room's Japanese text would lack those eight. *Region note:* what Japanese-version
+support needs is open until a Japanese disc's fonts are read.
+
+**Digits and punctuation live in one font only** (**verified** from the executable's three fonts
+and the extracted character maps): on the US disc only the **main 22-px font 0** (408 glyphs) has ',' ':' and the
+digits 0-9. The P★DA room's own font 0 (164 glyphs) has none of them, so the P★DA's money and play time rely on the
+main font being in the lookup chain behind it. A font mod that replaces the main font must keep those characters.
 
 ### Special symbols (code points reused for the game's own glyphs)
 
@@ -175,7 +180,7 @@ Each symbol is described in words.
 | Looks like | a lower-case e with an acute accent above |
 | Fonts that contain it | main font, 22 px |
 | Example messages | none (the US text writes é as U+00E9) |
-| Status | shape **verified**; purpose **guess** (an earlier é for "POKéMON") |
+| Status | shape **verified**; purpose open |
 
 #### U+2030: two low dots
 
@@ -195,7 +200,7 @@ Each symbol is described in words.
 | Looks like | a capital S inside a square frame |
 | Fonts that contain it | M3_out (Agate Village) font, 22 and 18 px; name_entry_menu font (in colosseumbattle_menu), 22 px |
 | Example messages | 9 times in 4 messages: the name-entry kana lists 0x2EE1, 0x2EE5 (last key after ！？) and a placeholder for an item name, 0x557E |
-| Status | shape **verified**; meaning **guess** (a key or placeholder symbol) |
+| Status | shape **verified**; meaning open |
 
 #### U+FF3E: small ring (handakuten key)
 
@@ -217,8 +222,7 @@ Each symbol is described in words.
 | Example messages | none in the US text |
 | Status | **verified** |
 
-The e / e+ / é glyphs at the era-name squares (㍼ ㍽ ㍾) look like an earlier home for the same marks, later duplicated at
-α / β (*guess*). Only β is used by the US text. For a translation or a modern font, these code points must be mapped back
+The e / e+ / é glyphs also sit at the era-name squares (㍼ ㍽ ㍾). Only β is used by the US text. For a translation or a modern font, these code points must be mapped back
 to their real meaning (₽, speech bubble, e-Reader marks), not drawn as the standard character.
 
 ## Hints at the original font
@@ -230,15 +234,14 @@ to their real meaning (₽, speech bubble, e-Reader marks), not drawn as the sta
   Japanese character sets; the main font also carries hiragana, katakana and full-width ASCII, and `jis_1` is exactly the
   JIS level-1 kanji set in Unicode order. So the bitmaps were very likely rendered from a Japanese system font
   (JIS-ordered) and then converted to this Unicode-keyed format.
-- The cell sizes (22, 21, 18 px) and the 4-bit anti-aliased bitmaps fit glyphs rendered from an outline font at those
-  pixel sizes, not hand-drawn pixel art (*guess*, from the smooth intensity edges).
 - **Which typeface:**
   - **Latin and Latin-1 letters: MS PGothic at 22 px** (*likely*, close to verified). For 91 of the 92 ASCII
     characters (and 50 of 56 Latin-1 ones) the game's advance width is exactly MS PGothic's width at 22 px plus
     1 pixel (the converter likely added one pixel of spacing), and MS PGothic rendered at 22 px matches the game's
     letter bitmaps with a mean correlation of 0.982 (other gothics: 0.63-0.78). Ricoh sells the same design as HG
     PGothic B.
-  - **Kana: a straight-stroke square gothic, not MS Gothic** (*likely*); **Heisei Kaku Gothic W5 fits** (*guess*).
+  - **Kana: a straight-stroke square gothic, not MS Gothic** (*likely*), closest to Heisei Kaku Gothic among the
+    specimens compared (which weight is open).
     Compared with published specimens and a public type tester, あかさたなアサタ match its construction and
     proportions, at a stroke weight between W3 and W5; Morisawa's Shin Go, nearly identical at 22 px, was not
     tested. Ruled out by eye: Fontworks Rodin, Hiragino Kaku, Kozuka and every rounded gothic.
@@ -253,6 +256,18 @@ to their real meaning (₽, speech bubble, e-Reader marks), not drawn as the sta
 - A new font id needs a slot: the line gap rule gives any id other than 0 and 1 a gap of half the cell height + 1.
 - The port can replace the whole path with a modern font renderer (outline fonts at any size); the metrics above are
   what it must reproduce for a faithful layout (window sizes and line breaks were tuned to them).
+- **drawing an outline font in the original's slots** (tested with 4K mock-ups, 640 x 480 scaled
+  4.5x, beside the original bitmaps; **verified** as measurements, the look judged by eye):
+  - Each glyph is drawn inside its original advance width on the original baseline, so line breaks stay identical.
+  - A font with other proportions (Arimo, for example) leaves uneven gaps when drawn at the slot's left edge (worst
+    around `t`). Sharing the slot's spare room out by the glyph's own side bearings removes them; scaling the glyph
+    0.9-1.1x horizontally toward the slot first gives a slightly fuller look.
+  - Size: Arimo at the main font's em has nearly the original cap height (15.2 against 15 px) but an x-height about
+    16% larger (11.6 against 10 px), so a slight horizontal narrowing is a compromise.
+  - The original apostrophe is curly, so U+0027 is best drawn from a font's U+2019 (’).
+  - The special symbols (above) need their own high-resolution drawings: an upscaled bitmap looks soft at 4K. Nine are
+    in the main font; the full-width Pokédollar, the e-acute symbol, the boxed S and the small ring are only in other
+    fonts.
 
 ## Efficiency
 
@@ -262,11 +277,15 @@ glyphs their own text needs instead of shipping one huge font, and the main font
 
 ## Open questions
 
-- **Font ids 2 and 4** are used by 27 messages (number inserts and stat labels such as ATTACK, DEFENSE) but **no font
-  file on the disc defines them** (*verified* by a scan of main.dol, common_rel, every module and every type-6 entry).
-  By the lookup rule those characters would draw as white boxes; what the game really shows needs a check in Dolphin
-  or the PC build. Candidates: the empty resource 1 once held them (perhaps in the Japanese version), or those messages
-  are never drawn.
+- **Font
+  ids 2 and 4** (used by 27 messages: number inserts and stat labels such as ATTACK, DEFENSE) are small 13 x 13 fonts
+  in main.dol's own data, registered at startup right after fonts 0, 1 and 3, so the game's five font slots start out
+  full (0, 1, 3, 2, 4) (**verified**: a log of every font registration, on a replay of a recorded play session). Later font
+  sets (rooms, menus) re-register 0, 1, 3 and 4 only.
+- Labels the game prints itself (for example the COLOSSEUM BATTLE list's "Lv50" / "Lv100" / "Lv???", made with a
+  `sprintf` into a Shift-JIS buffer and converted by `SJIStoGSchar`) take the same lookup as message text: a code no
+  registered font has draws as a solid white box, which is how a byte-order slip in that conversion shows on screen
+  (**verified** in the PC port (the decompiled code running natively) build against a Dolphin frame).
 - **Font 3** is switched to by 349 messages, including words (e.g. message 0x1A5 "POWER"), but no font 3 on the disc has
   letters: the main one holds only a space, the Card e menu's `system_tool` font 3 a space and a quote mark
   (*verified* from the glyph lists). Same check needed.
@@ -275,6 +294,6 @@ glyphs their own text needs instead of shipping one huge font, and the main font
 ## Region notes
 
 The fonts hold Unicode code points, so the format itself is region-neutral, but the US main font keeps the full
-Japanese kana set and kanji leftovers, and resource 1 is empty: the Japanese and PAL versions likely differ in which
-fonts fill ids 0-4 (*guess*; not compared). PAL languages would need more Latin glyphs (see messages.md, "Which
+Japanese kana set and kanji leftovers, and resource 1 is empty. Which fonts the Japanese and PAL versions put in ids
+0-4 is not compared yet. PAL languages would need more Latin glyphs (see messages.md, "Which
 languages the fonts support").

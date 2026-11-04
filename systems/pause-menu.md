@@ -3,7 +3,7 @@
 **Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely** in structure; XD's own data and additions not checked)
 
 Status: **partial** (2026-10-16). The menu the player opens on the field: party, P★DA, bag. Code:
-`fieldMenuMain` (proposed name; today `fn_8000D710`, in `menuFight.c` / `gs_range_8000D290.c`) and its thread
+`fieldMenuMain` (proposed name; today `heroMoveRunEvent` (0x8000D710), in `menuFight.c` / `gs_range_8000D290.c`) and its thread
 `fn_8000DAB0`; both byte-matched, so the flow is **verified** unless marked. Window mechanics: menus.md (not yet published).
 
 ## What it does
@@ -41,7 +41,7 @@ proposed names). Nothing is saved.
    The pause menu itself is a window over the frozen field, but the party, the bag and the P★DA are **menu rooms**:
    opening one pushes its room on the room-context stack and suspends the field (menu-rooms.md).
    **During a challenge run** (variable 0x8AE, below) dialog 0x109 offers only the **party** (choice 0) and **quit**
-   (choice 1: a yes / no question, message 0x3C46, then `fn_800889E4(1)` and the warp `std223_askYesNoThenWarp395` to
+   (choice 1: a yes / no question, message 0x3C46, then `menuSaveLoadSaveGame(1)` and the warp `std223_askYesNoThenWarp395` to
    the Battle Mode menu, room 0x395): no P★DA and no bag. The built copy of this loop is `gs_range_8000D290.c`; an
    older copy in `menuFight.c` lacks this branch.
 4. **Mode 1**: open the bag directly, without the menu. Script command 208 (`std208_promptDNASampleSelection`)
@@ -66,11 +66,11 @@ setting). **Verified** from the code, assert strings and the decoded room script
 - **Also cleared** by the GBA conversion code and by the Ho-Oh gift, which ends a run (menu-rooms.md, "Gift
   Pokémon"). No room script writes it.
 - **What changes during a run:** the pause menu offers only the party and quitting (above); field battles start
-  through the `toolbattle_menu` room (`fn_8006A65C`, with story variable 0xB59 from the area scripts) instead of the
+  through the `toolbattle_menu` room (`menuCBBattleReturnToMenuRoom` (0x8006A65C), with story variable 0xB59 from the area scripts) instead of the
   normal encounter path; when the run ends (0x8AE cleared, **likely** on a loss or on quitting) the game returns to the
   Battle Mode menu (room 0x395, `colosseumbattle_menu`); script command 216 skips its party heal (field-steps.md);
   every rest area's menu (command 199) has a choice leading to the same room change (command 229); and the GBA code
-  uses a different player record for the player's name (`fn_8006AEEC`; **guess**: a Battle Mode trainer).
+  uses a different player record for the player's name (`fn_8006AEEC`).
 - The rest areas' coupon commands 236 / 239 are either shared with the story run or count something else (not
   traced).
 
@@ -91,4 +91,4 @@ blurred: a fade takes its brightness down by a set percentage over a set time, a
 setting.
 
 ## Open questions
-- What `fn_800889E4` checks before the quit warp.
+- What `menuSaveLoadSaveGame` (0x800889E4) checks before the quit warp.

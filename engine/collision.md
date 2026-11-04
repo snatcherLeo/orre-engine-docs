@@ -3,7 +3,7 @@
 **Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
 
 Status: **partial** (2026-10-14). Format decoded and exported for every room; which query uses
-which part is verified from the code; a few attribute meanings are guesses (marked).
+which part is verified from the code; a few attribute meanings are not identified yet (marked).
 
 ## What it does
 
@@ -22,17 +22,20 @@ turns them into pointers in place when the room loads.
 
 | Offset | Field | Evidence |
 |---|---|---|
-| +0x00 | f32[3] translation, f32[3] rotation, f32[3] scale | data: (0,0,0), (0,0,0), (1,1,1) for static objects; copied per object by `fn_8010CD6C`, matrix built by `fn_8010CA30` / `fn_8010C8D0` (order of rotations: guess) |
+| +0x00 | f32[3] translation, f32[3] rotation, f32[3] scale | data: (0,0,0), (0,0,0), (1,1,1) for static objects; copied per object by `fn_8010CD6C`, matrix built by `colsysMakeSRTMatrix` (0x8010CA30) / `colsysMakeRotMatrix` (0x8010C8D0) (order of rotations not identified yet) |
 | +0x24 | group: **floor** | height / layer queries `fn_8010E138`, `GScolsys2WalkGetLayer`; normals face up |
 | +0x28 | group: **walls for the player and partner** | `colsysWallAll(.., useAlternate 0)` from `colsysWallSweep` (`hero_move.c`, partner code `gs_range_801C766C.c`) |
 | +0x2C | group: **walk-through event triggers** | `colsysPassGetEventID` (`people.c`), `GScolsys2ThruGetEventList` |
 | +0x30 | group: **examine (A button) event planes** | `GScolsys2Check` -> `fn_80111864` |
-| +0x34 | group: **walls for NPCs** | `colsysWallAll(.., useAlternate 1)` from `fn_8010F188` (`people.c`) |
+| +0x34 | group: **walls for NPCs** | `colsysWallAll(.., useAlternate 1)` from `GScolsys2HitNpcCollision` (0x8010F188) (`people.c`) |
 | +0x38 | group with 0x30-byte triangles | only the debug drawer reads it so far (open) |
-| +0x3C | u16 flags: bit 0 = **moving object** | queries transform by the object's own matrix (`fn_8010CA30`) instead of using the grid; the debug view draws static objects once into a display list and moving ones every frame (`GScolsys2Draw`, `fn_8010D8D4`) |
+| +0x3C | u16 flags: bit 0 = **moving object** | queries transform by the object's own matrix (`colsysMakeSRTMatrix` (0x8010CA30)) instead of using the grid; the debug view draws static objects once into a display list and moving ones every frame (`GScolsys2Draw`, `fn_8010D8D4`) |
 
 `GScolsys2GetObjEnable` / `GScolsys2SetObjEnable` switch single objects on and off (e.g. a door that
-opens), and every query skips disabled objects.
+opens), and every query skips disabled objects. The switch lives in the collision state, not in
+the file: each of the four floors keeps a 0x28-byte copy of every object's placement (translation, rotation, scale,
+then a u16 of flags at +0x24 whose bit 0 means **disabled**), filled from the loaded file when a floor is set up; the
+two functions find the active floor's copy by offset and test or toggle that bit (**verified** from the code).
 
 **Group (0x24 bytes):**
 
@@ -53,14 +56,19 @@ minimum corner, covering the floor's extent). The assembly agrees: every grid lo
 The loader fixes
 up only the triangle pointer for the +0x30 and +0x38 groups (no grid there).
 
+The +0x30 and +0x38 groups have only an **8-byte head**, the triangle offset and the
+count, and their triangles follow it directly (**verified**: in a Phenac City room the first examine triangle
+starts 8 bytes after its group's head). Anything that walks the file has to treat those two groups as
+8-byte heads, not 0x24-byte grid heads: reading the grid fields there runs into the first triangle.
+
 **Triangle (0x34 bytes; 0x30 in the +0x38 group):**
 
 | Offset | Field |
 |---|---|
 | +0x00 | 3 vertices, f32 x, y, z each |
 | +0x24 | f32[3] normal |
-| +0x30 | u8 attribute A: on floors 0xFF / 0x0F / 0xF0 seen; the debug drawer tints by its two nibbles (guess: floor layer bits) |
-| +0x31 | u8 attribute B: on walls 2, 3, 4, 6, 7 (guess: which edges are outer edges, bits 0-2); on floors 0, 1, 17 (guess: sub-layer / surface kind) |
+| +0x30 | u8 attribute A: on floors 0xFF / 0x0F / 0xF0 seen; the debug drawer tints by its two nibbles; meaning not identified yet |
+| +0x31 | u8 attribute B: on walls 2, 3, 4, 6, 7; on floors 0, 1, 17; meaning not identified yet |
 | +0x32 | u16 **event id** of walk-through triggers (one id per trigger object: 4, 5, 6 ... in Pyrite Town). **Examine planes keep their id in the u16 at +0x30 instead** (`fn_80111864` compares +0x30; Pyrite Town: 1, 2, 3, 10) |
 
 The floor-hit record returned by `fn_8010E138` has height, surface type, surface id, layer and
@@ -88,10 +96,18 @@ catching the player. *For modders:* floor triangles must face up with the game's
    the current collision (state `lbl_80404C68`, layers of 0xDC0 bytes; `GScolsys2GetCurFloor`).
 2. Every frame, movement code asks the collision system: the player (`hero_move.c`) and partner
    test their path against the player walls (`colsysWallSweep`), NPCs (`people.c`) against the NPC
-   walls (`fn_8010F188`), and both look up the floor height and layer.
+   walls (`GScolsys2HitNpcCollision` (0x8010F188)), and both look up the floor height and layer.
 3. Walking through a trigger plane returns its event id (`colsysPassGetEventID`); pressing A in
    front of an examine plane does the same (`GScolsys2Check`). The id selects the event in the
    hero-event table (events.md, common-script.md).
+   (**verified** from the code and a trace on a native build) The A press first looks for a person to talk to
+   (`peopleFindTalkTarget`); only when there is none does it examine. The examine test is a short line from
+   5 units above the player's feet to 10 units ahead along the facing (`heroMoveCheckEvent`). Each examine triangle
+   whose normal faces against that line is cut with the line's plane: the crossing must lie on the line (t from 0 to
+   1) and inside the triangle (`GScolsy2UtilChkInTri`, tested in the two axes the normal points least along). Up to
+   four different ids are collected, and each is dispatched as a "check event" (kind 3) with its id
+   (`heroDispatchEvent`, which logs `check event = <id>`). A counter or sign is usually one rectangle, two triangles
+   with the same id, so either half answers.
 4. `GScolsys2UnloadCCD` drops it when the room unloads.
 
 **Shared header:** the triangle, triangle-list and grid types are defined once in
@@ -130,6 +146,6 @@ filtering at run time (*likely* the intent). The debug view records static colli
 
 ## Open questions
 
-- Meaning of attribute bytes A and B on floors and walls (layer, surface type, edge mask: guesses).
+- Meaning of attribute bytes A and B on floors and walls.
 - The +0x38 group (0x30-byte triangles): who uses it.
-- The rotation order in `fn_8010CA30` (matters only for moving objects with rotation).
+- The rotation order in `colsysMakeSRTMatrix` (0x8010CA30) (matters only for moving objects with rotation).

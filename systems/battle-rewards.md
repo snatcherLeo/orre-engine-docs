@@ -3,8 +3,8 @@
 **Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely** in structure; XD's own data and additions not checked)
 
 Status: **partial** (2026-10-16). Companion to [battle-engine.md](battle-engine.md). Both rewards are
-battle-script commands at Gen 3's numbers ("get exp" 0x23 = `fn_802232F4`, "get money reward" 0x5D =
-`fn_8021E754`). Everything is **verified** from the byte-matched code unless marked; ids are Gen 3's held-item
+battle-script commands at Gen 3's numbers ("get exp" 0x23 = `wsCmd23` (0x802232F4), "get money reward" 0x5D =
+`wsCmd5D` (0x8021E754)). Everything is **verified** from the byte-matched code unless marked; ids are Gen 3's held-item
 effects.
 
 ## What it does
@@ -21,29 +21,37 @@ EXP-boost rule, 0x27 friendship changes, 0x25 prize money is given, 0x26 money i
 
 ## Flow
 
-### EXP (`fn_802232F4`)
+### EXP (`wsCmd23` (0x802232F4))
 1. No EXP if the fainted Pokémon is the player's own, or the battle kind gives none (rule 0x24).
 2. **Base:** `species base EXP x the fainted Pokémon's level / 7` (species field 0x10).
 3. **Split** among the winning side's Pokémon that are still able to battle and below level 100: those that **faced**
    it (`...CheckMeetEnemyFightPokemon`) share the base; if anyone holds an **Exp Share** (held-item effect 25), the
    base is halved first and the other half is split among the holders (a holder that also fought gets both parts).
    Each share is at least 1.
+   (**verified** from code): **who "faced" it** comes from a per-Pokémon **met-enemies list**: up to
+   12 enemy entry ids, kept on each party member's battle record (status 0xFD on `FightOutPokemon`), so it survives
+   switching out. At the start of every turn (`fightFloorSetMeetEnemyFightPokemonEnemySideAll`, called from the action
+   flow) each Pokémon on the field adds the enemies currently on the field. The split then gives a share to every able
+   Pokémon whose list holds the fainted enemy, so a Pokémon that was sent in and switched out before the faint still
+   gets EXP ("switch training", the same rule as Gen 3).
 4. **Boosts, each x1.5:** Lucky Egg (held-item effect 40); the battle kind's EXP-boost rule (0x2D: **likely** what
    that rule means); a Pokémon from another trainer (traded), which also switches the message to the "boosted" one.
-   (Gen 3's x1.5 for trainer battles is not applied separately; Colosseum's rule 0x2D plays that role: **guess**.)
+   (Gen 3's x1.5 for trainer battles is not applied separately.)
 5. **Shadow Pokémon:** no EXP is applied. If its heart-gauge level (`pokemonGetDarkPokemonLevel`) is **3 or more**, i.e. the
    gauge is **below 60%** of its starting value (battle-shadow.md), the amount is **added to a stored-EXP field** (Pokémon status 0xC6), given back when it is purified (**verified**, the purification ceremony applies it, battle-shadow.md "Purification"); above 60% the EXP is simply lost (**verified**).
-6. Otherwise: EVs from the fainted species (`fightPokemonGetEffortFromPokemon`), the EXP message (0x7532), then a
+6. Otherwise: EVs from the fainted species (`fightPokemonGetEffortFromPokemon`; the per-Pokémon step,
+   `pokemonGetEffortFromPokemon`, walks a 6-row table, one row per stat, of three u16: the Pokémon status id of that
+   EV, the species-data status id of the defeated species' yield, and a third value; layout **verified** from code), the EXP message (0x7532), then a
    level-up loop: fill the bar to the next level (growth-rate tables), raise stats, friendship (rule 0x27, player's
    Pokémon only), run the level-up script (`lbl_80378724`: messages, new moves), carry the remainder over.
 
-### Prize money (`fn_8021E754`)
+### Prize money (`wsCmd5D` (0x8021E754))
 Seen working in play after Willie's battle (the PC port
 running the decompiled code, 2026-10-17): the prize message showed (the amount itself was not compared with Dolphin).
 1. Only if the battle kind gives money (rule 0x25) and there is a winner to pay.
 2. `amount = multiplier x class base x highest level x the winner's money factor`, where the class base comes from
    the beaten trainer's class record (`fn_801FBD40`), the highest level is taken over the beaten trainer's Pokémon
-   and over the winner's Pokémon with status 0xCF set, which marks a Pokémon **snagged in this battle** (`fightPokemonBiosGetCatchEntryFlag`, set when the snagged Pokémon joins the party, `fn_80213A78`; **verified**): so snagging a trainer's strongest Pokémon does not lower the prize. The money factor is the winning
+   and over the winner's Pokémon with status 0xCF set, which marks a Pokémon **snagged in this battle** (`fightPokemonBiosGetCatchEntryFlag`, set when the snagged Pokémon joins the party, `wsCmdF0` (0x80213A78); **verified**): so snagging a trainer's strongest Pokémon does not lower the prize. The money factor is the winning
    trainer's field 0x48: 1 normally, set to 2 when a Pokémon holding an **Amulet Coin** enters battle (**verified**:
    `fn_8022D084`, battle-items.md). The multiplier is 1 with one Pokémon
    out per side, 2 in doubles, and **4** when the pool rule (0x26) is on.
@@ -66,18 +74,17 @@ mode never changes your saved party (**verified** from the battle-kind table). T
 read at that point too, but nothing is done with the value: **Pokérus never spreads** in Colosseum (**verified**:
 the only writers of a Pokémon's Pokérus value are Pokémon creation (0), the debug menu's Pokémon editor and the
 import of a Pokémon from a GBA game, `gba_misc.c`; so the only way to have Pokérus is to bring it from a GBA game).
-When `fn_8006B57C` is 1 (**guess**: battle
-mode or link play) the trainers'
+When `fn_8006B57C` is 1 the trainers'
 Pokémon are put back into their parties (`fightTrainerBackFightPokemonToTemotiPokemon`).
 
 ## Disc data
 
-Species base EXP (species table), growth-rate tables (pokemon-data.md (not yet published)), trainer class money base (trainer-class table,
+Species base EXP (species table), growth-rate tables (pokemon-data.md), trainer class money base (trainer-class table,
 trainers.md (not yet published)), held-item effect ids (item table).
 
 ## Changing it
 
-- EXP and money multipliers are code (`fn_802232F4`, `fn_8021E754`); a port option ("EXP x2", "no Exp Share split")
+- EXP and money multipliers are code (`wsCmd23` (0x802232F4), `wsCmd5D` (0x8021E754)); a port option ("EXP x2", "no Exp Share split")
   hooks these two functions.
 - Battle kinds switch EXP and money on and off by data (rules 0x24-0x27, 0x2D).
 

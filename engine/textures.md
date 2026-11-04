@@ -9,7 +9,7 @@ becomes shiny, and how portraits are stored. Evidence: `GStextureGetGXformat`
 `src/game/gs_range_80109C88.c`, and a survey of every texture entry on the USA disc.
 **How sure:** the functions named on this page byte-match the game, so the layouts, the format table and the code
 paths described are *verified* (read from matching C); the survey counts are *verified* by reading every texture; other
-remarks are marked *likely*, *guess* or open inline.
+remarks are marked *likely* or open inline.
 
 ## What it does
 
@@ -34,7 +34,7 @@ The file is a `GStextureHandle` as saved to disc, then the pixels:
 | 0x0C | u32 palette (TLUT) format |
 | 0x10-0x20 | wrap S/T, min/mag filter, LOD (runtime GX settings; *likely*) |
 | 0x28 | u32 offset of mip level 0 (0x80 on disc; becomes a pointer at load) |
-| 0x48 | u32 offset of the palette, for palette formats (becomes a pointer at load; *guess* from `tlutData`) |
+| 0x48 | u32 offset, becomes a pointer at load |
 | 0x54 | 0x20 bytes reserved for the GameCube GX texture object, 0x74: 0x0C for the palette object (filled at load: `GStextureLoad` builds them in place). |
 | 0x80 | pixel data, in GameCube tiled layout (heights round up to whole tiles: a 256x239 menu stores 240 rows) |
 
@@ -61,6 +61,12 @@ The file is a `GStextureHandle` as saved to disc, then the pixels:
 
 Room, NPC, trainer and Pokémon model textures are inside their HSD models (their formats and counts: hsd.md,
 hsd-models.md).
+
+**Three textures live in the main program, not in an archive** (**verified** from the code and by
+decoding them): `menuInit` loads them once at boot and registers them as resources of group 0: a 156x103 and a
+186x87 menu-parts image (RGBA8; ids 0x31A1200 and 0x6221200) and a 640x480 full-screen image at 4 bits per pixel
+(CMPR; id 0x6F71200), which is **the red Nintendo logo on black**. Which screen shows the logo is not traced yet; the
+id is never written out as a constant elsewhere in the code. 
 
 ## Shiny colouring (code)
 
@@ -106,7 +112,7 @@ This agrees with StarsMmd's GameCube model addon documentation.
   code in `gs_range_80109C88.c` picks it with `pokemonCheckRare`. Unown (species 0xC9) uses a
   per-form table instead (`lbl_8035B478[form][isShiny]`). Eggs and invalid Pokémon use portrait 0x33D.
 - A portrait id indexes the **menu-face table** (`_menuFaceBiosGetPtr`, 830 records of 8 bytes in
-  `common_rel`): byte 0 bit 7 = **shiny cell** (`fn_8010C388`), bit 6 = valid (*guess*), +0x04 = the
+  `common_rel`): byte 0 bit 7 = **shiny cell** (`fn_8010C388`), bit 6 open, +0x04 = the
   texture's FSYS entry id (for example 0x0DED1200 = `face001` in `poke_face.fsys`). Bulbasaur's
   normal (0x0001) and shiny (0x0183) portrait ids point at the **same texture**; only bit 7 differs.
 - **A portrait texture is a sheet of 42x42 cells** (the drawing code crops 0x2A x 0x2A,
@@ -115,7 +121,7 @@ This agrees with StarsMmd's GameCube model addon documentation.
     is taller than 42 (so shiny portraits are their own pixels, not a recolour);
   - in an 84-wide sheet, the right column (x 42) is used when the sprite is drawn with a negative
     width (facing the other way); 42-wide sheets (370 of 418) have no separate other-facing cell,
-    so those portraits are presumably just flipped (*guess*; to check in-game).
+    so how those portraits face the other way is still to check in-game.
 - **Body pictures** (64x64, `poke_body.fsys`) are separate files: the shiny one has the `_c`
   suffix (Bulbasaur: `body001` = entry 0x0815, `body001_c` = 0x0816, as stored in face[0] / face[1]).
 - Portrait textures are cached in a small most-recently-used list (`fn_8010BD6C`; evicting from
@@ -123,27 +129,32 @@ This agrees with StarsMmd's GameCube model addon documentation.
 
 ### The portrait slots and their load queue (from the code and the first battle)
 
-- **Slots** (`fn_8010C224` sets them up, count given by the caller): each slot holds the face record it shows, its
+- **Slots** (`menuFaceInit` (0x8010C224) sets them up, count given by the caller): each slot holds the face record it shows, its
   portrait id, a **state** (0 = waiting to load, 1 = loading, 2 = ready), the index of its own 0x6EC0-byte texture
   buffer, and an optional "next portrait" callback with its argument (**verified** from the code; all of these
   functions are exact matches of the original).
-- **Requesting a portrait** (`fn_8010AE2C`, used by the battle with no callback): it works out the portrait id from the
-  Pokémon (species, shiny, Unown form), queues it (`fn_8010B16C`) and then **waits, yielding its thread each frame,
+- **Requesting a portrait** (`fightPokemonGetFaceSpriteId`, 0x8010AE2C, used by the battle with no callback): it works out the portrait id from the
+  Pokémon (species, shiny, Unown form), queues it (`menuFaceRequestPokemon` (0x8010B16C)) and then **waits, yielding its thread each frame,
   until that slot is ready** (**verified**).
-- **The queue** (`fn_8010B16C`): if the portrait is already in a slot, it moves to the most-recently-used end;
+- **The queue** (`menuFaceRequestPokemon` (0x8010B16C)): if the portrait is already in a slot, it moves to the most-recently-used end;
   otherwise it takes a free slot, or **evicts the oldest slot** when all are full. Then it starts the load of the
   first slot still waiting (state 0) through the archive streamer (`fn_8017B000`, archive 0x5C0), unless one is
   already loading (**verified**). Menus pass a callback that hands out the next Pokémon of a list, so a whole party's
   portraits stream in one after another (**likely**).
-- **When a load finishes** (`fn_8010B5C4`, called by the archive streamer): the loaded texture is made relative
+- **When a load finishes** (`_menuFaceLoad` (0x8010B5C4), called by the archive streamer): the loaded texture is made relative
   again, copied into the slot's own buffer and set up there, the archive copy is released, the slot becomes ready,
   and the queue is run again for the next waiting slot (**verified**). This copy step is why a portrait's texture is
   set up twice (once by the archive, once in the slot).
 - **Why it matters / efficiency:** a fixed number of fixed-size buffers, one load at a time, and least-recently-used
   eviction keep portraits within a known memory budget and spread disc reads over frames (**likely** the intent).
-- **Open (2026-10-17):** in the PC port (the decompiled code running natively), Willie's battle stops at the trainer intro with the queue spinning on a waiting
-  slot whose portrait lookup returns nothing (the PC build now prints every slot's id, state and lookup result when
-  the queue spins; next run). Not yet known whether a slot's id is wrong or the lookup misses in the PC port.
+- **The slots live for the whole game** (verified from the code): the menu system's start-up
+  (`menuInit`, called once at boot) creates **24 slots**, and nothing clears them afterwards. So a portrait loaded
+  once (the party's, an opponent's) stays ready until 24 newer ones push it out; a second visit to the party screen
+  finds them ready.
+- **Asking at the wrong time loses the portrait** (verified): the archive streamer handles one
+  archive at a time, and a portrait read asked for while another archive is loading is parked and never restarted
+  (see [disc-files.md](disc-files.md), "One archive load at a time"). The slot then stays "loading" and anything
+  waiting on it waits forever. The game's own callers avoid this by asking only when the disc is idle (likely).
 
 ## Appearance inventory (every place a Pokémon's look shows up)
 
@@ -155,12 +166,43 @@ data), or open.
 | Battle | 3D battle model (PKX) | 35 species: a **separate shiny model** (`pkx_rare_*`, table `lbl_80374F20`); all others: **one model**, recoloured at runtime from the PKX colour block (`fn_801DE190(..., pokemonCheckRare)`) | known (code) |
 | Menus, party, summary, trade (portraits) | 42x42 portrait | **separate pixels**: bottom cell of the same `poke_face` sheet (menu-face record bit 7) | known (code) |
 | Body pictures (64x64, `poke_body`) | 2D body picture | **separate files**: `bodyNNN` / `bodyNNN_c` (species face[0] / face[1] body ids) | known (data); which screens use them: open |
-| PC box | icons or portraits? | | open |
+| PC box | **likely the 42x42 portraits** (no separate icon art exists) | if portraits: the same shiny cell as menus | **likely** (data); to confirm in-game |
 | Summary screen | portrait, body picture or 3D model? | | open |
 | Strategy Memo (Pokédex-like memo) | picture of each seen Pokémon | | open |
 | Evolution scene, Pokémon Relive / purification, snag, trade | 3D model (the same PKX path is called from `evolution.c`, `pokemon_relive.c`) | presumably the battle model path, with the shiny flag passed (*likely*; to confirm per call) | open |
 | Overworld (Pokémon shown in the field, e.g. Castform, `powalen_b1`, in M1_out) | overworld model (type 2) | | open |
 | GBA link / Pokémon Box transfers | data only (personality decides shininess) | n/a | known |
+
+**Where the PC box's Pokémon pictures come from** :
+- **There is no separate box-icon art on the disc** (**verified** from the archive list): the only per-species 2D art
+  is `poke_face` (418 portrait sheets) and `poke_body` (826 body pictures). The PC box archives (`pcbox_menu`,
+  `pcbox_poke_box`) hold frames, backgrounds and fonts, no per-species pictures.
+- **Body pictures are loaded by one screen only:** the Colosseum battle team screen (`menuColosseumBattle`) is the only
+  code that opens the body-picture archive (**verified**, every reference to its archive id).
+- **So the PC box shows either the portraits or the 3D models** (**likely** the portraits, the same 42x42 cells as the
+  party menu; not yet confirmed in-game or from the box screen's code, which is still mostly assembly).
+
+## The title logo (for texture packs and title-screen mods)
+
+The "Pokémon Colosseum" logo on the title screen is **a texture on flat planes inside a 3D scene**, not a 2D overlay
+(**verified** from the data):
+- **Where:** archive `title.fsys`, entry 3 `logo_demo`, an HSD scene file (root `scene_data`: one model set of 31
+  joints and 43 meshes, plus a camera and lights). The same archive holds the two camera animations
+  `cam_logo_demo_start` / `cam_logo_demo_stop` (entries 5 and 6) and the copyright lines and "PRESS START" texture
+  `menu_018` (a separate type-9 texture). The `t_vs_*` textures in the archive are pre-rendered Pokémon pictures
+  (Raikou, Typhlosion and others), not logo pieces.
+- **The logo texture:** one image, **540 x 224, RGBA8** (full colour with an alpha channel), the whole logo with both
+  words. Four meshes use it, all at the same depth (z = 154 in the scene): a 252 x 108-unit quad drawn opaque, the same
+  quad starting fully transparent, and two 17-triangle strips over the upper part of the logo (one opaque, one
+  transparent), **likely** a shine or reveal that sweeps across it.
+- **The glow:** a second image, **810 x 336, CMPR**, a light-burst version of the logo (glowing outlines with streaks),
+  stored twice (byte-identical copies) and drawn on two larger quads (378 x 65 and 378 x 97 units) at the same depth.
+- **Animated:** yes. The scene carries **3 joint animations and 3 material animations** (**verified** present in the
+  file); that they drive the logo's fade-in and glow is **likely** (the pieces that start transparent). Which joint or
+  material each one moves is not read yet.
+- **For a texture pack:** replacing the 540 x 224 logo image changes the logo everywhere it is drawn; the glow image
+  must match it in shape, or the burst will outline the old logo. Whether a higher-resolution image of the same
+  proportions works is not checked yet.
 
 ## Decoding
 
@@ -181,5 +223,5 @@ RGB5A3/RGB565/IA8 palette; a decoder for these formats reads every texture on th
 
 - Whether 42-wide portraits are flipped when facing the other way (to check in-game); how the faces
   were framed.
-- Shiny Pokémon shown outside battle (PC or summary 3D views): presumably the same colour block (*guess*);
-  check `fn_801DE190`'s other callers.
+- Shiny Pokémon shown outside battle (PC or summary 3D views): how they get their colours; check `fn_801DE190`'s other
+  callers.

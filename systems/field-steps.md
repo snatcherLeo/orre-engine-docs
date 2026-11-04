@@ -23,7 +23,12 @@ the step counter). *Tsure* = "companion": `cbTsureFriend` is the party's walking
 
 **Healing by script** (**verified**, `gs_range_801C766C.c`): script command 216
 (`std216_partyStatusUpdate_8ae(mode)`) heals the whole party (mode 0, the same `fn_801D0AFC` the blackout uses) or
-cures only poison and bad poison (mode 1); it does **nothing while variable 0x8AE is set** (the game-mode variable:
+cures only poison and bad poison (mode 1). *Example (added 2026-10-24, **verified** from the decoded room script):* in
+The Under's subway (`M4_subway_B2_1`), beating the last guard, Rider **Nelis** (battle 342, or 549), sets story flag 1102
+and then runs command 216 in mode 0: **the whole party is healed**; none of the room's other three guards heal. In the
+story this is after the Venus battle (at the TV studio) and right before Venus is caught fleeing with the Shadow
+Liner's key and the ride to the Lab's garage (story-route.md (not yet published) steps 95-100). Why the developers heal here is not
+stated. It does **nothing while variable 0x8AE is set** (the game-mode variable:
 a Battle Mode run, pause-menu.md; no healing between battles there). 
 
 ## Data structures
@@ -44,10 +49,14 @@ In the hero movement work (`HeroMoveWork`, `lbl_80426BD0`):
 2. **Field poison (`cbPoison`), every 4 footsteps:** each party Pokémon that is poisoned or badly poisoned
    (conditions 3 and 4, battle-turn-flow.md) loses **1 HP** (status 0x83). If any HP changed, the screen plays the
    poison flash (`fadeEffectDokuStart`). A Pokémon that reaches 0 HP faints: message 0x444E names it, and its
-   friendship takes the "fainted" change (event 7). If no party Pokémon has HP left, the player **blacks out**:
+   friendship takes the "fainted" change (event 7). (**verified** from the byte-matched code):
+   **the poison is not cleared** when it faints this way; nothing in this step resets its status, so the Pokémon stays
+   poisoned at 0 HP, and a Revive or Max Revive brings it back **still poisoned** (seen in play, 2026-10-22). Gen 3's
+   handheld games clear the status when field poison makes a Pokémon faint (**likely**, from the Emerald decompilation's
+   field-poison code), so this is a Colosseum difference, probably an oversight. If no party Pokémon has HP left, the player **blacks out**:
    message 0x444F, **half the money is lost** (`heroDecPokedoru(money / 2)`), the whole party is healed
    (`fn_801D0AFC(1)`: `pokemonAllKaihuku` on each), and condition 0x3E (Hyper Mode, likely) is cleared from every
-   Pokémon. Then the game **warps to a return point** (`fn_80113FE8`): a script-set one if a script has set it
+   Pokémon. Then the game **warps to a return point** (`floorReturnToSavedRoom` (0x80113FE8)): a script-set one if a script has set it
    (script command 161, which stores a room id, a second id and an entry index in the field state `lbl_80408378`
    +0x48-0x50 and flags it at +0x51), otherwise the one in the save header (fields 5, 7 and 8: room id, second room id,
    entry index; save-data.md "Save header"), and requests that room (`floorRequestChange`). So the save header's
@@ -62,13 +71,20 @@ In the hero movement work (`HeroMoveWork`, `lbl_80426BD0`):
    returns the player to the spot the area's script chose (**likely**); elsewhere it uses the save header's fields. (**verified**): **every save** writes those fields from the field state's "return map" (+0x3C-0x44,
    read with `fn_8011418C`; set by command 128; whether room changes also set it is not traced) just before memory-card task 4 (the save menu,
    `std235_menuShowSaveMenu`, and the P★DA's save), so a blackout and a Continue both go to the return map stored at
-   the last save. This is Gen 3's field-poison rule (1 HP per 4 steps, poison can faint; **likely** the same source, as with
+   the last save. (**verified** from the room scripts and the code): A blackout after a lost battle
+   goes through the same field blackout (`fightStartEncount`), which also takes **half the player's money**
+   (`heroDecPokedoru(money / 2)`). Pyrite Town shows the override at work: its outdoor script sets a fixed return point
+   twice. While the windmill trouble is under way (story flags 1027 set, 1028 not), it is the town square
+   (`M2_out` entry 8). From Miror B.'s defeat until Fateen is talked to (1043 set, 1048 not), it is the Colosseum
+   lobby (`M2_enter_1F` entry 2). Story-route.md part 2 names those stretches. This is Gen 3's field-poison rule (1 HP per 4 steps, poison can faint; **likely** the same source, as with
    the battle engine).
 3. **Friendship (`cbTsureFriend`), every 256 footsteps:** every valid party Pokémon gets the friendship change for
    event 5 (`pokemonGetFriendFormPokemonFriendFilterId(mon, held item's effect, 5)`, so the Soothe Bell scales it: friendship.md). Half of these ticks are skipped at random, and the amount comes from Gen 3's friendship table (friendship.md).
 4. **Shadow Pokémon and the day care (`fn_801ED3B8`), every footstep:**
    - each party Shadow Pokémon (not yet purified, gauge above 0) counts footsteps in its Shadow record; at 256 the
-     gauge takes the "walking" drop (event kind 1, battle-shadow.md) and the count restarts;
+     gauge takes the "walking" drop (event kind 1, battle-shadow.md) and the count restarts; the
+     count is the u16 at +0x06 of the Pokémon's 12-byte entry at the start of save section 15 (save-data.md), so it
+     survives saving: a Shadow Pokémon saved at 200 steps takes its drop 56 steps after loading;
    - the **day-care** Pokémon (save section 0x0B, present when its first byte is set): a Shadow Pokémon there counts
      the same way and takes the "day care" drop (kind 3) every 256 steps; any other Pokémon below level 100 gains
      **1 EXP per footstep** and learns any level-up move it reaches (Gen 3's day-care rule);
@@ -80,10 +96,10 @@ In the hero movement work (`HeroMoveWork`, `lbl_80426BD0`):
      or 1), into that register. So with 0xD0 clear the day-care block's +2 receives the **leader index (0 or 1)**;
      with it set, the incremented step value. A deterministic original quirk, not random memory; the PC port
      reproduces it.
-     What 0xD0 / 0xD1 are for is not traced (**guess**: the day care's "steps since deposit").
+     What 0xD0 / 0xD1 are for is not traced.
 5. **P★DA mail (`cbStep`), every footstep:** for each mail entry that has not been received yet and whose send rate
    is not 0xFFFF, it draws a random number (`HSD_Randf`, 0-1) and the mail **arrives with chance rate / 64,000**
-   per footstep (`rand < rate x (1/64) / 1000`), provided its condition holds: the mail **stage** value (`fn_801D1338`: mail save section
+   per footstep (`rand < rate x (1/64) / 1000`), provided its condition holds: the mail **stage** value (`mailBiosGetCounter` (0x801D1338): mail save section
    +0x444, below) compared with the entry's value by one of seven tests (=, >, <, >=, <=, !=, always), and a second
    condition by type (**likely** a story flag or a script check: `chkMailSend` uses both; not every type read). Arriving mail goes into the mailbox and starts the **new-mail notice** unless one is
    already running (`mailMainStartSe`): the music is paused and the mail's jingle plays (its own 64 KB sound
@@ -108,24 +124,24 @@ against the module's relocations).
 | Offset | Field | Accessor |
 |---|---|---|
 | +0x00 | u8 second condition's type (0xFF = none) | `mailGetSendCondType` |
-| +0x01 | u8 stage comparison: 0 =, 1 >, 2 <, 3 >=, 4 <=, 5 !=, 6 always (0xFF = never) | `fn_801D142C` |
-| +0x02 | u16 first row of its Shadow Pokémon list (0xFFFF = none) | `fn_801D1734`, `fn_801D1864` |
-| +0x04 | u16 stage value to compare with (0xFFFF = never) | `fn_801D13E4` |
+| +0x01 | u8 stage comparison: 0 =, 1 >, 2 <, 3 >=, 4 <=, 5 !=, 6 always (0xFF = never) | `mailDataBiosGet01` (0x801D142C) |
+| +0x02 | u16 first row of its Shadow Pokémon list (0xFFFF = none) | `shadowGroupGetEntryByte` (0x801D1734), `shadowGroupGetEntryId` (0x801D1864) |
+| +0x04 | u16 stage value to compare with (0xFFFF = never) | `mailDataBiosGet04` (0x801D13E4) |
 | +0x06 | u16 send rate: chance rate / 64,000 per footstep (0xFFFF = never by steps) | `mailGetSendRate` |
-| +0x08 | u16 mail stage set when it is read (0xFFFF = no change; the decomp's "f32 duration" is wrong) | `fn_801D139C` |
+| +0x08 | u16 mail stage set when it is read (0xFFFF = no change; the decomp's "f32 duration" is wrong) | `mailDataBiosGet08` (0x801D139C) |
 | +0x0C / +0x10 / +0x14 | u32 messages: sender, subject, contents | `mailGetSenderName`, `mailGetSubject`, `mailGetContents` |
 | +0x18 | u32 attached file group (a picture shown with the mail, **likely**) | `mailGetAttachFileGroup` |
 | +0x1C | s32 second condition's value (a flag id for the flag type, ...) | `mailGetSendCondition` |
-| +0x20 | s32 story flag **set** when read (0 / -1 = none; the code calls `std078_flagSetFalse`, whose name is swapped and which sets the flag) | `fn_801D1504` |
-| +0x24 | s32 script run when read | `fn_801D14C0` |
-| +0x28 | s32 hero event queued when read | `fn_801D147C` |
+| +0x20 | s32 story flag **set** when read (0 / -1 = none; the code calls `std078_flagSetFalse`, whose name is swapped and which sets the flag) | `mailDataBiosGet20` (0x801D1504) |
+| +0x24 | s32 script run when read | `mailDataBiosGet24` (0x801D14C0) |
+| +0x28 | s32 hero event queued when read | `mailDataBiosGet28` (0x801D147C) |
 
 **What the US data shows** (**verified** by reading the module; counts only):
 - **32 mails** from **9 senders**; 78 Shadow-list rows in 17 lists, raising Shadow states 1 to 5.
 - **No mail arrives by walking:** every record has send rate 0 and the stage test "always", the second condition
   is type 0 with value 0 throughout. So in Colosseum the footstep mail check (step 5) never fires on its own. Mail
   is **sent by the room scripts** (`mailMainSendByScrpt(n)`, e.g. Outskirt Stand and its shop, under flag 1144),
-  and the step machinery is **likely** shared code that XD uses more (a guess until XD's table is read).
+  and the step machinery is **likely** shared code.
 - When read: 24 mails set a story flag, 16 update Shadow records, 3 show an attached picture, 2 run a shared-script
   function, none queues a hero event or changes the mail stage.
 
@@ -145,7 +161,7 @@ field text.
 Distance is accumulated as one float and callbacks are a fixed array of 8; nothing is allocated per step.
 
 ## Open questions
-- What story flag 0xD0 and variable 0xD1 mean (the day-care step count, a guess).
+- What story flag 0xD0 and variable 0xD1 mean.
 - Whether the money loss shows the amount; whether other Pokémon Centers set the return point another way.
 - Whether field poison really happens in normal play: it is in the code, but whether any field poisoning survives a
   battle in Colosseum (conditions are kept after battle in Gen 3) is a visual check.

@@ -5,7 +5,7 @@
 Status: **partial** (2026-10-16). A map of the game's global state: for each system, the few globals that
 hold what it is doing, what type they are and where to read more. Names here are **proposed names** (the decomp
 still calls them `lbl_<address>`); the address is given so they can be found. Labels: **verified** (an accessor or a
-byte-matched use proves it), **likely**, **guess**. Covers about 300 globals; the rest are constants or one-use data.
+byte-matched use proves it), **likely**, or **open** where the meaning isn't settled. Covers about 300 globals; the rest are constants or one-use data.
 
 ## What it does (the pattern)
 
@@ -118,5 +118,5 @@ actions, 8 step callbacks); hot, short-lived data goes to the locked cache. Very
 
 ## Open questions
 - About 230 more `.sbss` / `.bss` globals with 15 or more uses still have no name (mostly menu and GBA-link state).
-- The meaning of several **guess** rows (P★DA mail work, some battle bytes). (The 0xB60 hero record in the NPC event
+- The meaning of several unsettled rows (P★DA mail work, some battle bytes). (The 0xB60 hero record in the NPC event
   code is the trade partner's.)

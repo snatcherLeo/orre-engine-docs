@@ -40,7 +40,7 @@ back when the battle room pops. Details: new-game-flow.md, step 8.
 4. Afterwards: the room it returns from is recorded as the previous room; if the battle is a **whiteout battle**
    (its record's zenmetsu flag) and the player lost, the blackout runs (half the money, warp to the return point:
    battle-rewards.md, "Losing a battle").
-5. Flag 0x9B0 is cleared, the field room's **sound script runs again** (`fn_80112700`: function 0 of the room
+5. Flag 0x9B0 is cleared, the field room's **sound script runs again** (`floorStartSoundScript` (0x80112700): function 0 of the room
    script, room record +0x28), so the room's music comes back, pending field events are cleared, and unless 0xE05
    is set the field fades back in. With `fadeByCaller` set (Willie's case), `fieldStartEncount` does that fade
    itself with its own duration; with `noFade` the script handles it. The script then reads the result
@@ -134,11 +134,10 @@ hits) is on in every real kind; 0x0E, which the shift makes "Rui's advice", is o
 advice and would make no sense for the decomp's name there (critical hits).
 
 So one name in the middle of the decomp's list is in the wrong place; the most likely fix is that `GetNekoniKoban`
-(Pay Day) is not at 0x0B and every later name moves up one. Pay Day's own script command (0x91, `fn_8021B0B0`) checks
+(Pay Day) is not at 0x0B and every later name moves up one. Pay Day's own script command (0x91, `wsCmd91` (0x8021B0B0)) checks
 only the general money rule (status 0x25), so there may be no separate Pay Day flag at all (**likely**). The shift covers 0x0B-0x15 (at least). The byte-matched code is unaffected;
 only the decomp's field and getter names (`fightKindDataBiosGet...Flag`) are shifted, so the names were most likely
-assigned to the getters by position from another source, probably XD's symbols, whose battle-kind record would then
-have one more field in that range (**guess**; check against the XD decomp's record).
+assigned to the getters by position from another source.
 
 **The 19 battle kinds** (from each kind's name message, developer names in Japanese,
 translated here; **verified** names, meanings of the abbreviations **likely**):
@@ -207,8 +206,8 @@ unless marked):
   section 0). When the battle room is popped, this thread resumes.
 - **The return:** if the encounter has the "whole team fainted" flag and the player lost: the battle id is cleared,
   half the money is taken, the party is healed (**likely**, `fn_8018DA88`), and the game warps to the save's return
-  point (`fn_80113FE8`) with the shared fade-in. Otherwise flag 0x9B0 is cleared, the field is restored
-  (`fn_80112700`, `std162_fieldClearPending`), the screen fades in unless flag 0xE05 is set, the battle id is cleared,
+  point (`floorReturnToSavedRoom` (0x80113FE8)) with the shared fade-in. Otherwise flag 0x9B0 is cleared, the field is restored
+  (`floorStartSoundScript` (0x80112700), `std162_fieldClearPending`), the screen fades in unless flag 0xE05 is set, the battle id is cleared,
   and the **result** is returned (also readable later with script command 103, `std103_battleGetResult`). The calling
   script then continues; for Willie, the room script sets the story flags.
 - **It blocks and yields**, so it must run on a GS thread (a script thread or one made for it), never from code that
@@ -220,7 +219,7 @@ unless marked):
   fightStartEncount)`, 16 KB stack) with the battle id as its argument. That is the model for a "start battle N"
   debug command.
 
-### The battle thread and its turn loop (battle_main.c, `fn_801EFA08`)
+### The battle thread and its turn loop (battle_main.c, `fightMainThread` (0x801EFA08))
 The battle runs on its own thread. Its work is organised as **actions** queued in a FIFO and "flowed" (run) by
 `fightActionCreateAndFlowFifo(queue, ..., kind, sub, order table)`; the order tables (`lbl_80375CC8`, `lbl_80375D30`,
 `lbl_80375D80`) list which action kinds run in which order for the start, the turn and the end of a battle.
@@ -235,6 +234,13 @@ phase are **likely**):
    - Focus Punch's "tightening its focus" runs before anything else (`WazaKiaipantiPre`);
    - **the actions run** (`AllFightOutPokemonDoFightAction`): use a move (`OutWaza`, which runs the move sequence),
      switch (`Irekae`), use an item (`UseItem`), **Call** (`Call`, Colosseum's Hyper Mode cure), run (`Nigeru`);
+   - **replacing fainted Pokémon** (**verified** in play): when a move knocks Pokémon out, the
+     move's script reaches command 0x24, which walks every trainer (`fightFloorLoopValidFightTrainer`) and asks each to
+     pick a replacement (`_wsCmd24SelectIrekaeSub` → `fightTrainerSelectIrekaeFightPokemon`). For the player this is
+     the "Choose a POKéMON." party screen (`fightMenuFightTrainerGcHeroSelectIrekaeFightPokemon` → `menuFightOpenPokemon`
+     → `menuPokemonOpenFight`), in a loop that re-opens the screen every 10 frames until a valid, healthy Pokémon is
+     picked (or the battle ends or a command timer runs out). Several faints from one move (Earthquake knocking out
+     both sides) go through the same loop, once per trainer;
    - **end of turn** (`OneTurnPost`): weather and status damage, timed effects;
    - an optional total battle timer can end the battle (time-out result).
 3. **End** (`Syuuryou`): result messages, EXP and money, the fade-out, then the battle's own clean-up; control
@@ -268,7 +274,7 @@ lead to only a few kinds of place:
    contiguous block as the script bytes** (`0x80375E24`-`0x80399F58`), so a port that keeps that block at its
    GameCube addresses covers them too (**verified**: the PC port's battle-script check passes with no extra mapping);
 4. **message-id tables** in read-only data (`0x80279D2C`-`0x80279ED0` and `0x8047E550`-`0x8047E5F8`), which the
-   message commands (0x12 / 0x13, `fn_802261B0`) index with flag byte `lbl_80478D78[5]` to choose the text.
+   message commands (0x12 / 0x13, `wsCmd13` (0x802261B0)) index with flag byte `lbl_80478D78[5]` to choose the text.
 No script ever points at the interpreter's own state, the cursor (`lbl_8047B610`), the context (`lbl_8047B62C`) or the
 command table: only code touches those. So a script can change, by address, only that small set of variables, plus
 whatever its status commands reach through the game's general status functions (save data, party, battle floor).
@@ -299,13 +305,13 @@ operands are the object, the field id and an index, as for the matching `*GetSta
 | 0x07 / 0x08 | `WS_DAMAGE_LOSS` / `_ONLY` | adjust damage (Endure, False Swipe) |
 | 0x16 / 0x17 | `WS_TSUIKA_DIRECT_ACT` / `INDIRECT_ACT` | set primary / secondary effect |
 | 0x1C / 0x1F / 0x21 / 0x22 | condition / side-condition / move-condition / type checks | jump if status / side affecting / status3 / type |
-| 0x28 | `fn_80222ACC`: cursor = the 4-byte address after the command | goto |
+| 0x28 | `wsCmd28` (0x80222ACC): cursor = the 4-byte address after the command | goto |
 | 0x3C-0x3F | `WS_SEQRET`, `WS_WAZAEND`, `WS_SEQEND`, `WS_SPEABIEND` | return, end, end2, end3 |
 | 0x5F | `WS_SWITCH_A_D`: toggles state bit 0x1000 | swap attacker with target (the same bit, 1 << 12) |
 | 0x82 / 0x8A / 0x8C | Fake Out / Haze / Thrash handlers | jump if not first turn / normalise buffs / confuse when Thrash ends |
 | 0x93 / 0x95 | `fightCheckOneHitKO` / `WS_WEATHER_CHANGE` | try KO / set weather |
 | 0xAA, 0xB1, 0xBD, 0xBF | Destiny Bond, Foresight, Psych Up, Defense Curl | the same four moves' commands |
-| 0xB7 | `fn_8021799C`: Present (random 40 / 80 / 120 power, or heals a quarter) | Present damage calculation |
+| 0xB7 | `wsCmdB7` (0x8021799C): Present (random 40 / 80 / 120 power, or heals a quarter) | Present damage calculation |
 | 0xC5-0xC7, 0xCB, 0xCE, 0xD0, 0xD3, 0xD5, 0xD7, 0xDC, 0xE4 | semi-invulnerable on / off, Minimize, Charge, Torment, Taunt, Role Play, Ingrain, Yawn, Grudge, Secret Power | the same commands |
 | 0xF6 / 0xF7 | `WS_ITEMEND` / `WS_GETEND` | finish action / finish turn (R/S's last command) |
 | 0xF8-0xFD | `WS_STATUS_GET8/16/32`, `WS_STATUS_SET8/16/32` | **none: Colosseum's own additions** |
@@ -343,12 +349,12 @@ does what its Gen 3 name says is **likely**, except where this page describes th
 So the body is Gen 3's "effect hit" script, with Colosseum's preamble, a cleared byte after the damage adjustment,
 waits with arguments, and the HP data written after the messages.
 
-### End of a move (`moveend`, command 0x49, `fn_8021FAD4`; **verified** where named)
+### End of a move (`moveend`, command 0x49, `wsCmd49` (0x8021FAD4); **verified** where named)
 A small state machine (step counter `lbl_8047B627`, steps 0-17, like Gen 3's 17 steps plus "done") runs after each
 move. Identified steps: 0 **Rage** (condition 0x13: the hit Pokémon's Attack rises), 1 a thaw / status step, 2
-**Synchronize** for the target (`fn_8022D2CC`), 3 the **contact abilities** (`fn_8022D6BC`), 5 Synchronize for the
-attacker (`fn_8022D20C`), 6 the **Choice Band lock** (held-item effect 29 sets condition 0x36, the locked move), 9 **King's
-Rock / Shell Bell** (`fn_8022BB84`), 14 the "last move used" bookkeeping (for Mirror Move and friends), 16 **next
+**Synchronize** for the target (`fn_8022D2CC`), 3 the **contact abilities** (`_wsTokuseiAfterDamage` (0x8022D6BC)), 5 Synchronize for the
+attacker (`_wsCheckSynchronizeAttacker` (0x8022D20C)), 6 the **Choice Band lock** (held-item effect 29 sets condition 0x36, the locked move), 9 **King's
+Rock / Shell Bell** (`_wsSoubiItemAfterDamage` (0x8022BB84)), 14 the "last move used" bookkeeping (for Mirror Move and friends), 16 **next
 target**: for a move that hits several Pokémon, the effect's script (`lbl_80379BFF[effect]`) is run again for the
 next target. Steps 0-6 are in Gen 3's order; King's Rock comes at step 9 where Gen 3 has it at 12, so steps 7-15 are
 at least partly reordered (not all identified).
@@ -365,26 +371,26 @@ Reflect and Helping Hand.
 | Tackle | 0 | `0x80375F40` | the plain hit (below) |
 | Bite / Confusion | 31 / 76 | `0x803765AE` / `0x80376C69` | `setbyte` the secondary-effect id (8 flinch / 7 confusion) into the shared flag bytes, then `goto` the plain hit |
 | Secret Power | 197 | `0x803782B5` | `getsecretpowereffect` (0xE4, `WS_HIMITUNOTIKARA`: the effect by terrain), then `goto` the plain hit |
-| Return | 121 | `0x8037757B` | `attackcanceler`, `accuracycheck`, `happinesstodamagecalculation` (0xB6, `fn_80217AE4`: power from friendship, friendship.md), then joins the plain hit at `attackstring` |
-| Growl / Tail Whip | 18 / 19 | `0x80376343` / `0x8037634E` | `setbyte` the stat changer (0x91 Attack -1 / 0x92 Defense -1, Gen 3's encoding) into `0x8038FF76`, then `goto` the shared stat-down script `0x8037637A`: `attackcanceler`, `jumpifstatus2` (0x1D: a substitute blocks it), `accuracycheck`, `attackstring`, `ppreduce`, `statbuffchange` (0x89, `fn_8021B8B8`), `jumpifbyte` x2 on the flag bytes (fell / can't fall), the animation, `printfromtable` (0x13, message table `0x80279DC0`), `waitmessage`, then the shared tail |
-| Reflect | 65 | `0x80376AA3` | `attackcanceler`, `attackstring`, `ppreduce`, `setreflect` (0x7E, `fn_8021CB58`), animation, `printfromtable` (`0x80279D70`), `waitmessage`, the shared tail |
+| Return | 121 | `0x8037757B` | `attackcanceler`, `accuracycheck`, `happinesstodamagecalculation` (0xB6, `wsCmdB6` (0x80217AE4): power from friendship, friendship.md), then joins the plain hit at `attackstring` |
+| Growl / Tail Whip | 18 / 19 | `0x80376343` / `0x8037634E` | `setbyte` the stat changer (0x91 Attack -1 / 0x92 Defense -1, Gen 3's encoding) into `0x8038FF76`, then `goto` the shared stat-down script `0x8037637A`: `attackcanceler`, `jumpifstatus2` (0x1D: a substitute blocks it), `accuracycheck`, `attackstring`, `ppreduce`, `statbuffchange` (0x89, `wsCmd89` (0x8021B8B8)), `jumpifbyte` x2 on the flag bytes (fell / can't fall), the animation, `printfromtable` (0x13, message table `0x80279DC0`), `waitmessage`, then the shared tail |
+| Reflect | 65 | `0x80376AA3` | `attackcanceler`, `attackstring`, `ppreduce`, `setreflect` (0x7E, `wsCmd7E` (0x8021CB58)), animation, `printfromtable` (`0x80279D70`), `waitmessage`, the shared tail |
 | Taunt | 175 | `0x80377ECC` | `attackcanceler`, `attackstring`, `ppreduce`, `accuracycheck`, `settaunt` (0xD0, `WS_CHOUHATSU`; fails to `0x80377B05`), animation, `printstring` 0x75DB, `waitmessage`, the shared tail |
-| Helping Hand | 176 | `0x80377EED` | the same with `trysethelpinghand` (0xD1, `fn_802160EC`) and message 0x75DC |
-| Snatch | 195 | `0x80378288` | `attackcanceler`, `trysetsnatch` (0xE0, `fn_80214DB0`), `attackstring`, `ppreduce`, animation, `pause`, `printstring` 0x75EF, `waitmessage`, the shared tail |
-| (after a faint) | | `0x80378721` | `getexp` (0x23, `fn_802232F4`), `end2` |
-| (after a faint) | | `0x80378798` | `checkteamslost` (0x24, `fn_80222C44`), `end2` |
-| (send-in) | | `0x8037879E` | `openpartyscreen` (0x50, `fn_8021F24C`), `switchhandleorder` (0x51), `drawpartystatussummary` (0x61), `getswitchedmondata` (0x4C), `switchindataupdate` (0x4D), 0x73 (`fn_8021DB78`), `printfromtable` (`0x80279EA0`), `hidepartystatussummary` (0x62), `switchinanim` (0x4E), `waitmessage`, `switchineffects` (0x52), two status reads and `jumpifhalfword` checks, `WS_SCA_END_SET` (0x68), `end2` |
+| Helping Hand | 176 | `0x80377EED` | the same with `trysethelpinghand` (0xD1, `wsCmdD1` (0x802160EC)) and message 0x75DC |
+| Snatch | 195 | `0x80378288` | `attackcanceler`, `trysetsnatch` (0xE0, `wsCmdE0` (0x80214DB0)), `attackstring`, `ppreduce`, animation, `pause`, `printstring` 0x75EF, `waitmessage`, the shared tail |
+| (after a faint) | | `0x80378721` | `getexp` (0x23, `wsCmd23` (0x802232F4)), `end2` |
+| (after a faint) | | `0x80378798` | `checkteamslost` (0x24, `wsCmd24` (0x80222C44)), `end2` |
+| (send-in) | | `0x8037879E` | `openpartyscreen` (0x50, `wsCmd50` (0x8021F24C)), `switchhandleorder` (0x51), `drawpartystatussummary` (0x61), `getswitchedmondata` (0x4C), `switchindataupdate` (0x4D), 0x73 (`wsCmd73` (0x8021DB78)), `printfromtable` (`0x80279EA0`), `hidepartystatussummary` (0x62), `switchinanim` (0x4E), `waitmessage`, `switchineffects` (0x52), two status reads and `jumpifhalfword` checks, `WS_SCA_END_SET` (0x68), `end2` |
 
 **The plain hit (effect 0, `0x80375F40`)**, with handlers: Colosseum's preamble (`WS_STATUS_GET16` 0xF9, `jumpifhalfword`
-0x2A `fn_8022290C`, `WS_WAZAKOUKA_CHECK` 0x21, `orword` 0x35 on the hit marker, `setbyte` 0x2E, `WS_STATUS_SET8` 0xFB);
+0x2A `wsCmd2A` (0x8022290C), `WS_WAZAKOUKA_CHECK` 0x21, `orword` 0x35 on the hit marker, `setbyte` 0x2E, `WS_STATUS_SET8` 0xFB);
 then `attackcanceler` (0x00, `WS_HITCHECK`), `accuracycheck` (0x01, `fightCheckAccuracy`; a miss goes to
-`0x80375FDD`), `attackstring` (0x02, `fn_802282D8`), `ppreduce` (0x03, `fn_8022808C`), `critcalc` (0x04,
-`WS_CRITICAL_CHECK`), `damagecalc` (0x05, `fn_80227C40`), `typecalc` (0x06, `WS_TYPE_CHECK`), `adjustnormaldamage`
-(0x07, `WS_DAMAGE_LOSS`), `setbyte` (clears a byte), `attackanimation` (0x09, `fn_80226FD4`), `waitanimation` (0x0A,
-`fn_80226F0C`), `effectivenesssound` (0x0E), `hitanimation` (0x5C), `waitstate` (0x3A), `healthbarupdate` (0x0B),
-`critmessage` (0x0D), `waitmessage` (0x12), `resultmessage` (0x0F), `waitmessage`, `datahpupdate` (0x0C, `fn_802267E8`),
-`waitanimation`, `seteffectwithchance` (0x15, `fn_80224820`), `tryfaintmon` (0x19, `fn_80224158`), `setbyte` (resets
-the end-of-move step counter), `moveend` (0x49, `fn_8021FAD4`), `end` (0x3D). **The miss path** (`0x80375FDD`):
+`0x80375FDD`), `attackstring` (0x02, `wsCmd02` (0x802282D8)), `ppreduce` (0x03, `wsCmd03` (0x8022808C)), `critcalc` (0x04,
+`WS_CRITICAL_CHECK`), `damagecalc` (0x05, `wsCmd05` (0x80227C40)), `typecalc` (0x06, `WS_TYPE_CHECK`), `adjustnormaldamage`
+(0x07, `WS_DAMAGE_LOSS`), `setbyte` (clears a byte), `attackanimation` (0x09, `wsCmd09` (0x80226FD4)), `waitanimation` (0x0A,
+`wsCmd0A` (0x80226F0C)), `effectivenesssound` (0x0E), `hitanimation` (0x5C), `waitstate` (0x3A), `healthbarupdate` (0x0B),
+`critmessage` (0x0D), `waitmessage` (0x12), `resultmessage` (0x0F), `waitmessage`, `datahpupdate` (0x0C, `wsCmd0C` (0x802267E8)),
+`waitanimation`, `seteffectwithchance` (0x15, `wsCmd15` (0x80224820)), `tryfaintmon` (0x19, `wsCmd19` (0x80224158)), `setbyte` (resets
+the end-of-move step counter), `moveend` (0x49, `wsCmd49` (0x8021FAD4)), `end` (0x3D). **The miss path** (`0x80375FDD`):
 `attackstring`, `ppreduce`, `pause`, `playanimation` (0x45), `effectivenesssound`, `resultmessage`, `waitmessage`,
 `waitanimation`, then `goto` the tail at `0x80375FBF`.
 
@@ -420,7 +426,7 @@ ranges; the two agree on the kinds of memory, and this one adds the writable dat
 
 ### How a move picks its script (**verified** from code and the executable's data)
 `fightActionFlowFightOutPokemonOutWaza` (the "use a move" action) re-reads the move from the Pokémon's move slot (in
-case it changed since the choice), then `fn_802128D0` starts it:
+case it changed since the choice), then `fightSeqRunWaza` (0x802128D0) starts it:
 1. clears the per-move floor fields and flags;
 2. **Encore** (**likely**: condition 0x2A, a forced move kept in a slot): replaces the chosen move with the encored one
    and re-picks the target, except for move 165 (Struggle);
@@ -464,9 +470,9 @@ are code per move, picked through this table; a mod that adds a move needs a row
 **How the AI calls them** (**verified** from the C and the
 target assembly): the move's status getter hands them out (`wazaGetStatus(0, move, id, 0)`: id 28 = value, 29 = hit,
 30 = damage); a missing damage function is replaced by `fightTrainerAiWazaDamageNull`. The AI's move scorers
-(`fn_8023A740`, the inlined copies in `fn_8023B498`, and `fn_8023C370`) call the damage function through the pointer
+(`fightTrainerAiScoreWazaToTarget` (0x8023A740), the inlined copies in `fn_8023B498`, and `fightTrainerAiGetWazaDamageValue` (0x8023C370)) call the damage function through the pointer
 with **four arguments: (trainer, pokemon, move, target)**, where `pokemon` is **the AI's own Pokémon on the field that
-is choosing its move** (the decision function `fn_802342CC` passes each of its Pokémon still without an action) and
+is choosing its move** (the decision function `fightTrainerAiSelectFightAction` (0x802342CC) passes each of its Pokémon still without an action) and
 `target` the opposing Pokémon being scored. So every per-move AI damage function takes those four arguments, even the
 small wrappers that only use the first two.
 
@@ -476,7 +482,7 @@ small wrappers that only use the first two.
 - **Send-out** (`fight_out_pokemon_suffix_80207C6C.c`): the code starts the send-out animation on the Pokémon's
   model sequence, plays the cry at once (`soundStart(cry, 0, 0xFF, 0)`), then waits until the animation ends; a shiny
   then gets an extra effect (`pokemonCheckRare` -> sequence 0x67).
-- **From move scripts:** a two-byte script command (`fn_8021EE48`: command, target) plays the target's cry the same
+- **From move scripts:** a two-byte script command (`wsCmd56` (0x8021EE48): command, target) plays the target's cry the same
   way, so any move or battle event script can cry (which scripts use it is not traced yet).
 - **Timing:** a cry is started by code when an event begins, not by an animation frame. Move-effect sounds are
   different: WZX sequences start sound resources from their timed nodes (`wazaSequenceEntry.c`).
@@ -494,7 +500,7 @@ status 62 (0x3E) is **likely Hyper Mode** (what Call cures; battle-turn-flow.md)
 90% of the time (**likely**). The result (1 or 2) is stored as the
 move's damage multiplier.
 
-### Damage (the core formula, `fn_80232110`)
+### Damage (the core formula, `fightSeqCalcDamage` (0x80232110))
 In order, as the code does it (**verified** from the decompiled code, which is a byte-for-byte match of the game;
 every id below is a Gen 3 internal id: ability, held-item effect, species, type):
 
@@ -526,19 +532,18 @@ variance (`fightApplyDamageVariance`).
   0x2C) or a Focus Band that triggered leave it at 1 HP when the damage would knock it out; the Endure and Focus Band
   cases set a result flag for their messages.
 
-### PP use (`fn_8022808C`, Gen 3's `ppreduce` 0x03; **verified**)
-No PP is used when state bit 0x800 (Struggle, Shadow Rush) or 0x200 is set, or while the attacker's status 0x118 is set (**guess**: the later turns of a multi-turn move;
-not identified). Otherwise 1 PP, plus 1 per **Pressure** (ability 46) holder among the Pokémon the move targets: every other
+### PP use (`wsCmd03` (0x8022808C), Gen 3's `ppreduce` 0x03; **verified**)
+No PP is used when state bit 0x800 (Struggle, Shadow Rush) or 0x200 is set, or while the attacker's status 0x118 is set (not identified yet). Otherwise 1 PP, plus 1 per **Pressure** (ability 46) holder among the Pokémon the move targets: every other
 Pokémon for target range 6, the opponents for ranges 4 and 7, otherwise the target (battle-targets.md, "Move target
 ranges"). The PP lives on the party Pokémon (status 0x80, per move slot).
 
-### Secondary-effect chance (`fn_80224820`, Gen 3's "set effect with chance" 0x15; **verified**)
+### Secondary-effect chance (`wsCmd15` (0x80224820), Gen 3's "set effect with chance" 0x15; **verified**)
 The chance is the move's effect chance (field 0x0C), **doubled by Serene Grace** (ability 32); roll `random % 100`
 against it, then apply the effect as a secondary effect (`WS_TSUIKA_INDIRECT_ACT`'s path). A menu switch
 (`fn_8000817C`, byte `lbl_8047A271`, 0 at boot, set from a yes / no prompt in the debug menu's battle page, `fn_80007B30`, which sits among the `dbgMenuFight*`
 functions: **likely**) forces the chance to 99: a developer option, off by default.
 
-### Secondary-effect ids (`fn_802249B8`, behind `WS_TSUIKA_DIRECT_ACT` / `INDIRECT_ACT`)
+### Secondary-effect ids (`fightSeqSetTsuikaKouka` (0x802249B8), behind `WS_TSUIKA_DIRECT_ACT` / `INDIRECT_ACT`)
 The effect to apply is in sequence flag byte 3 (`lbl_80478D78[3]`). Before the main `switch`, a per-effect table
 (`lbl_80279EF4[effect]`) names a condition that blocks the effect if the target already has it; the `switch` then
 covers effects **7 to 59**. That is exactly the range of Gen 3's `MOVE_EFFECT_*` ids from confusion (7) to "Sp. Atk
@@ -551,13 +556,26 @@ by Struggle and Shadow Rush) is just "set the effect byte to 0xCE, go to the pla
 (**likely**, by Gen 3's meaning of effect 14; the recoil code itself not read). The scripts these effects run are a
 second table, `lbl_80399F58` (39 entries; which value indexes it is not traced: it has fewer entries than there are effects).
 
+### Protect, Detect and Endure (`wsCmd77` (0x8021D224); **verified** from code)
+- **Success chance by repeat count:** a table of four 16-bit values, FFFF / 7FFF / 3FFF / 1FFF (`lbl_8047E5F8`: always,
+  1/2, 1/4, 1/8), indexed by the Pokémon's repeat count (status 0xFC), capped at the fourth entry.
+- **The count resets** when the user's previous move (status 0xF1) was not one of 0xB6 / 0xC5 / 0xCB (Protect, Detect,
+  Endure by their Gen 3 move ids: **likely**).
+- **It fails outright when the user acts last in the turn** (`fightFloorIsLastActionFightOutPokemon`).
+- On failure it sets result flag 0x40 (status 0x3B); the shared flag byte (`lbl_80478D78[5]`) holds 0 / 1 for
+  effect 0x6F / 0x74 (**likely** Protect-type / Endure) and 2 for a failure.
+- *Port note:* the success table is read as 16-bit values; read at another width it made every first Protect fail
+  half the time in the PC port until fixed.
+
 ### Accuracy (`fightCheckAccuracy`, Gen 3's command 0x01; **verified** from code)
 1. Two special move values skip the roll (Gen 3's "current move" / "check Lock-On only" markers, 0xFFFF / 0xFFFE).
-2. Protect-type moves, Magic-Coat-style reflection and the always-hit checks (`fn_80228DAC`: Lock-On, semi-invulnerable
+2. Protect-type moves, Magic-Coat-style reflection and the always-hit checks (`_fightCheckAccuracySpecial` (0x80228DAC): Lock-On, semi-invulnerable
    targets, ...) come first.
 3. **Stage** = attacker's accuracy stage + 6 - defender's evasion stage (Foresight, condition 0x19, ignores evasion),
    clamped; the move's accuracy (field 6) is multiplied by the stage table's multiply / divide pair
-   (`fightWazaHitKakurituDataBios...`). Thunder (effect 152) drops to 50 in sun.
+   (`fightWazaHitKakurituDataBios...`). Thunder (effect 152) drops to 50 in sun. The stage table has 13 entries of two
+   bytes, multiplier then divisor (`...GetKake` reads byte 0, `...GetWaru` byte 1; the getter hands out a `u16*` to
+   the pair, but nothing reads it as one number; **verified** from code).
 4. Compound Eyes x1.3; Sand Veil in sandstorm x0.8; Hustle x0.8 for physical-type moves; BrightPowder
    x(100 - its value) / 100.
 5. Miss if `random % 100 + 1 > accuracy`. In doubles, a spread move (target kinds 4 and 6) that misses one target
@@ -571,7 +589,7 @@ second table, `lbl_80399F58` (39 entries; which value indexes it is not traced: 
 - On a hit the damage is the target's current HP; Endure (condition 0x2C) or a triggered Focus Band leave it at 1 HP
   instead, each with its own message.
 
-### Type effectiveness and STAB (`fn_802274F0`, used by `WS_TYPE_CHECK` 0x06; **verified**)
+### Type effectiveness and STAB (`fightSeqWazaTypeCalc` (0x802274F0), used by `WS_TYPE_CHECK` 0x06; **verified**)
 - **Struggle (165) and Shadow Rush (356) skip it entirely**: no STAB, no weakness, no resistance, no immunity. So
   Shadow Rush always does neutral damage, whatever the target's types.
 - **STAB:** x1.5 when the move's type matches either of the attacker's types (applied to the move's damage value,
@@ -583,6 +601,26 @@ second table, `lbl_80399F58` (39 entries; which value indexes it is not traced: 
   (and Solar Beam in sun is treated as hitting).
 - The type ids are Gen 3's (0 Normal, 1 Fighting, 4 Ground, 6 Bug, 7 Ghost, 9 the "???" type, 11 Water, ...;
   **verified** for the ids used in these checks and in the Net Ball rule).
+
+### Where the types live, and the move-result markers (**verified** in play)
+- **A battle Pokémon's record** (0x6E0 bytes per slot, 12 slots) holds its two current types at **+0x65C / +0x65E**
+  (u16 each, read and written through selector 0xFF) and its ability at **+0x660**. Sending a Pokémon out copies its
+  species' two types there; the record's reset sets both to 9 (the "???" type) first. Moves that change types
+  (Conversion, Color Change) write the same field.
+- **Just before them, at +0x62C, sits the Pokémon's action record** for the turn (0x30 bytes: kind, a buffer value,
+  four 32-bit slots that point at the action's data and its actor / target, the queue position, four display values).
+  It is reset at the start of every turn (`fightActionInit`), which writes the queue position as -1. Its end is exactly
+  the start of the types, so an engine that stores that record with wider fields overwrites the types and the
+  ability every turn.
+- **The type check records its result as a condition on the move** (`_fightSeqApplyAisyouToDamage`): 0x41 super
+  effective, 0x42 not very effective, 0x43 no effect, written only for conditions whose **kind is 0x2A** in the
+  condition table. Those markers drive the "It's super effective!" / "It's not very effective..." / "It doesn't affect"
+  messages, Wonder Guard, and the no-effect path that stops the move's side effects on an immune target. The damage
+  scaling (x2, x0.5, x0) happens separately, before the marker.
+- **The condition table** (`lbl_8035BBA8`, 0x14-byte records indexed by condition id): +0x00 the object kind (u8),
+  +0x01 a slot, +0x02 the write mode, +0x03 the maximum stack, +0x04 a count id, **+0x08 the condition's kind (u16)**,
+  +0x0A a u16 (meaning not known), +0x10 a message id (u32, the text shown for the condition). The game's battle code
+  asks this table whenever it sets or tests a condition, Protect's included.
 
 ### Damage prediction for the AI (`fightSeqGetNromalWazaDamage`)
 The AI estimates a move's damage by **running the real damage steps** on saved copies: it saves both Pokémon (1,760
@@ -623,30 +661,28 @@ on the linked pages.
 
 | Rule | Where | What it decides | Inputs | Label |
 |---|---|---|---|---|
-| Who a move targets | `fn_8022B2CC` (battle-targets.md, "Move target ranges") | the target of the chosen move, from the move's target range (move record +0x03): one chosen target, a random opponent, both opponents, every other Pokémon, the user, or the opposing side | target range, the player's or AI's choice, Follow Me, Lightning Rod (ability 31) for Electric moves | verified |
+| Who a move targets | `fightSeqSelectTarget` (0x8022B2CC) (battle-targets.md, "Move target ranges") | the target of the chosen move, from the move's target range (move record +0x03): one chosen target, a random opponent, both opponents, every other Pokémon, the user, or the opposing side | target range, the player's or AI's choice, Follow Me, Lightning Rod (ability 31) for Electric moves | verified |
 | Spread moves | the same function (ranges 4 and 6) plus the "next target" step of the move script, which runs the move's effect script again for each further target | range 4 hits both opponents; range 6 hits every other Pokémon, **the ally included** (Earthquake); damage is halved for a spread move in a double battle | target range, battle type (Pokémon out per side) | verified |
-| Retargeting when the target has fainted | `fn_802128D0` (step 5 of "How a move picks its script") | a fainted target is replaced: the partner, or the other opponent. Targets are stored as target ids, not pointers, and resolved again when the move runs, which is what makes this possible (battle-targets.md) | stored target id, the field | verified |
-| Encore's forced move | `fn_802128D0` (step 2) | replaces the chosen move and re-picks its target (not for Struggle) | condition 0x2A | likely |
-| Call | `fn_80212D6C` (battle-turn-flow.md, 3c) | ends Hyper Mode (chance by nature and heart-gauge level; 100% in all the US data) and wakes a sleeping Pokémon; nothing else, and no accuracy change | the Pokémon's nature, gauge level, Hyper Mode and sleep conditions | verified |
-| Type effectiveness | `fn_802274F0` (`WS_TYPE_CHECK`, above), reading the chart through `zokuseiGetWazaJoutai` (`fn_8010C508`) | STAB, the chart's result per defending type, Levitate, Foresight, Wonder Guard; Struggle and Shadow Rush skip it | move type, the attacker's and defender's current types, abilities, conditions | verified |
+| Retargeting when the target has fainted | `fightSeqRunWaza` (0x802128D0) (step 5 of "How a move picks its script") | a fainted target is replaced: the partner, or the other opponent. Targets are stored as target ids, not pointers, and resolved again when the move runs, which is what makes this possible (battle-targets.md) | stored target id, the field | verified |
+| Encore's forced move | `fightSeqRunWaza` (0x802128D0) (step 2) | replaces the chosen move and re-picks its target (not for Struggle) | condition 0x2A | likely |
+| Call | `fightActionCallMain` (0x80212D6C) (battle-turn-flow.md, 3c) | ends Hyper Mode (chance by nature and heart-gauge level; 100% in all the US data) and wakes a sleeping Pokémon; nothing else, and no accuracy change | the Pokémon's nature, gauge level, Hyper Mode and sleep conditions | verified |
+| Type effectiveness | `fightSeqWazaTypeCalc` (0x802274F0) (`WS_TYPE_CHECK`, above), reading the chart through `zokuseiGetWazaJoutai` (`zokuseiDataBiosGetAisyou` (0x8010C508)) | STAB, the chart's result per defending type, Levitate, Foresight, Wonder Guard; Struggle and Shadow Rush skip it | move type, the attacker's and defender's current types, abilities, conditions | verified |
 | The type chart itself | the type table (battle-types.md), one row per attacking type | the multiplier for each pair | data | verified |
-| Physical or special | the type table's category byte, read through `fn_8010C4A0` by the damage formula, the type-boosting items, Hustle's accuracy rule and the AI (battle-types.md) | which attack and defence stats a move uses | the **move's type**: Colosseum decides category by type, as Gen 3 does, but as data | verified |
+| Physical or special | the type table's category byte, read through `zokuseiDataBiosGetCategory` (0x8010C4A0) by the damage formula, the type-boosting items, Hustle's accuracy rule and the AI (battle-types.md) | which attack and defence stats a move uses | the **move's type**: Colosseum decides category by type, as Gen 3 does, but as data | verified |
 | Turn order | `fightFloorSortFightOutPokemonPtrArySub` with `fightFloorCmpfightOutPokemonNimbleness` (battle-turn-flow.md, sections 1-2) | who acts first: action priority, then move priority, then effective Speed, ties by a coin flip | action kind, move record +4, Speed and its modifiers (abilities, weather, stages, badge, Macho Brace, paralysis, Quick Claw with the per-turn random) | verified |
 | Hit or miss | `fightCheckAccuracy` (command 0x01, "Accuracy" above) | whether a move hits | move accuracy, accuracy / evasion stages, Foresight, Lock-On, semi-invulnerable targets, weather, abilities, BrightPowder, the RNG | verified |
 | Critical hits | `WS_CRITICAL_CHECK` (command 0x04, "Critical hit" above) | whether a hit is critical, and its multiplier | critical stage (Focus Energy, high-critical moves, items), the battle kind's critical rule, Battle Armor / Shell Armor, Shadow Rush in Hyper Mode (90%) | verified (Hyper Mode condition likely) |
-| Damage | `fn_80232110` (command 0x05) and `fightApplyDamageVariance` (0x07) ("Damage" above) | the damage number, its random roll, Focus Band and Endure survival | stats by category, level, power, STAB and type result, weather, items, abilities, critical multiplier, the RNG | verified |
-| Who has lost | `fn_80222C44` (command 0x24, Gen 3's `checkteamslost`; battle-turn-flow.md section 8) | sets the result when a side has no usable Pokémon (2 the host side wins, 3 the other side), with a draw rule for a self-destructing last move | each side's remaining Pokémon, battle rule 0x34 | verified |
-| Sending in a replacement | choosing: command 0x50 (`fn_8021F24C`, Gen 3's `openpartyscreen`) through `fightTrainerSelectIrekaeFightPokemon` (AI or party menu); sending in: `fn_80222EF0` (battle-turn-flow.md section 8, step 9) | which party member replaces a fainted one, and whether an empty field slot gets it or stays empty | the fainted Pokémon's replacement index (status 0x121) | verified |
-| EXP and prize money | commands 0x23 (`fn_802232F4`) and 0x5D (`fn_8021E754`), battle-rewards.md | who gets EXP and how much; the prize and whether it is pooled | battle-kind rules 0x24-0x27 and 0x2D, the fainted Pokémon, Exp Share, Lucky Egg, Amulet Coin | verified |
+| Damage | `fightSeqCalcDamage` (0x80232110) (command 0x05) and `fightApplyDamageVariance` (0x07) ("Damage" above) | the damage number, its random roll, Focus Band and Endure survival | stats by category, level, power, STAB and type result, weather, items, abilities, critical multiplier, the RNG | verified |
+| Who has lost | `wsCmd24` (0x80222C44) (command 0x24, Gen 3's `checkteamslost`; battle-turn-flow.md section 8) | sets the result when a side has no usable Pokémon (2 the host side wins, 3 the other side), with a draw rule for a self-destructing last move | each side's remaining Pokémon, battle rule 0x34 | verified |
+| Sending in a replacement | choosing: command 0x50 (`wsCmd50` (0x8021F24C), Gen 3's `openpartyscreen`) through `fightTrainerSelectIrekaeFightPokemon` (AI or party menu); sending in: `_fightCheckFaintedFightOutPokemonSub` (0x80222EF0) (battle-turn-flow.md section 8, step 9) | which party member replaces a fainted one, and whether an empty field slot gets it or stays empty | the fainted Pokémon's replacement index (status 0x121) | verified |
+| EXP and prize money | commands 0x23 (`wsCmd23` (0x802232F4)) and 0x5D (`wsCmd5D` (0x8021E754)), battle-rewards.md | who gets EXP and how much; the prize and whether it is pooled | battle-kind rules 0x24-0x27 and 0x2D, the fainted Pokémon, Exp Share, Lucky Egg, Amulet Coin | verified |
 | Losing a battle | `fightStartEncount` (battle-rewards.md, "Losing a battle") | blackout (half the money, healed, back to the return point) or the script decides | the encounter's whole-team-fainted flag | verified |
 
-For comparison with the sequel (**guess**: from community descriptions of XD, not from XD's code): XD's Call is
-said to also raise a Shadow Pokémon's accuracy, which Colosseum's Call does not do.
 
 ## Disc data
 
 Encounter, battle-kind, battle-type, effect, move and critical tables live in `common_rel` (common.fsys) and the
-executable; their layouts are partly in `game-data-tables.md` (not yet published) and `pokemon-data.md` (not yet published). Move sequences (the `WS_*`
+executable; their layouts are partly in `game-data-tables.md` (not yet published) and `pokemon-data.md`. Move sequences (the `WS_*`
 scripts) are data too (the move table points at them).
 
 ## Changing it
@@ -655,6 +691,15 @@ scripts) are data too (the move table points at them).
 - The damage formula is one function: a port option (for example XD's or later generations' mechanics) would hook it
   there; keep the original as the default for faithfulness.
 - Move behaviour lives in move sequences (data); new moves can reuse existing `WS_*` commands.
+
+### Mod surface
+- **Data it reads:** move data and move scripts (the `WS_*` command sequences), the battle record and battle kind
+  (rules), species data, held-item effects, the type chart.
+- **Hooks it would need:** the damage formula (one function), new script commands for new move effects, new rule ids
+  for battle kinds, and a type-chart extension (new types such as Fairy).
+- **Fixed-size limits:** the script command table, the type chart (Gen 3's 17 types plus "???"), the effect-id range.
+- **Must stay vanilla in GameCube-accurate mode:** damage, accuracy, critical hits, every script and every random draw
+  in its order.
 
 ## Efficiency
 

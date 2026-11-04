@@ -5,7 +5,7 @@
 Status: **partial** (2026-10-16): static geometry in the bind pose, materials' base colour and first texture
 are decoded for every model on the disc; animation (its key format: animation-tracks.md), lighting and the full material / texture-stage setup are not.
 **How sure:** the layouts below come from the decompiled HSD headers and code and were checked by walking every
-model on the disc with no errors (*verified*); remarks on purpose are marked *likely* or *guess*.
+model on the disc with no errors (*verified*); remarks on purpose are marked *likely*.
 Related: models-animation.md (not yet published) (PKX, animation slots), [hsd.md](hsd.md) (the HSD library),
 [textures.md](textures.md).
 
@@ -97,7 +97,7 @@ type-2 entries are 1,099 distinct ones: `people_archive` lists `agent_m_a2` twic
 geometry: helpers), 527 PKX models; 38,704 polygon objects (13,384 envelope, 0 shape animation), 3.4 million
 triangles. Rendered checks (the decoded geometry converted to OBJ and viewed, *verified* by eye): Phenac City (round plaza, Colosseum dome, sky dome),
 a Cipher Peon, Wes fully textured, Jirachi, Pikachu, all as expected. Several Pokémon carry untextured 12-triangle
-boxes on hidden joints (*guess:* helper volumes for shadows or hit tests).
+boxes on hidden joints.
 
 ## Disc data and tools
 

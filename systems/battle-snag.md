@@ -7,7 +7,7 @@ Status: **partial** (2026-10-16). Companion to [battle-engine.md](battle-engine.
 ## What it does
 
 Throwing a ball (in Colosseum: a Snag Ball, or any ball with the Snag Machine, at a trainer's Shadow Pokémon) runs
-the battle-script command at Gen 3's "handle ball throw" number (0xEF, `fn_80213E94`). It computes Gen 3's catch
+the battle-script command at Gen 3's "handle ball throw" number (0xEF, `wsCmdEF` (0x80213E94)). It computes Gen 3's catch
 odds, rolls up to four "shakes", plays the throw and shake animations, and jumps to the caught or broke-free script.
 The formula is **Ruby / Sapphire's**, with one Colosseum change: **a Shadow Pokémon uses its own catch rate from the
 Shadow Pokémon table, not its species' rate.** Everything below is **verified** from the byte-matched code unless
@@ -24,7 +24,7 @@ marked.
   Shadow Pokémon uses byte +0x00 of its **Shadow Pokémon record** (`fn_801EEE44(shadowId)`, the 96-entry table at
   `lbl_80478F6C`). In the US data most Shadow Pokémon have 45, and the range runs from 10 to 255.
 - **Repeat Ball's "caught before":** for a Shadow Pokémon, the story flag in its Shadow record (+0x12,
-  `fn_801EEAD0`: set once that Shadow Pokémon has been snagged); for others the Pokédex "caught" flag (status 0x63).
+  `darkPokemonCheckFlag12` (0x801EEAD0): set once that Shadow Pokémon has been snagged); for others the Pokédex "caught" flag (status 0x63).
 
 ## Flow
 
@@ -44,7 +44,7 @@ marked.
    (`fightOutPokemonHokakuEffect`, steps 0-4) are played in between; the shake count is stored in sequence flag byte 5
    and picks the "broke free" message from a 4-entry table (`lbl_80279E1C`).
 6. **Caught:** sound 0x3F6, message 0x771F, then the caught script (`lbl_80375E51`), which goes on to Gen 3's "give
-   caught Pokémon" command (0xF0, `fn_80213A78`): the Pokémon is marked seen / caught (and as a snagged Shadow
+   caught Pokémon" command (0xF0, `wsCmdF0` (0x80213A78)): the Pokémon is marked seen / caught (and as a snagged Shadow
    Pokémon), removed from the battle (its battle copy set to 0 HP), its conditions cleared, Hyper Mode ended.
    **Broke free:** the script `lbl_80375E5F`.
 
@@ -60,18 +60,36 @@ the target assembly of `main.dol` and the RELs): a cool-down rule that is **like
 ## Disc data
 
 - Balls and multipliers: the balls are item ids 1-12; the multipliers are code above (no multiplier table).
-- Shadow catch rates and "snagged" flags: the Shadow Pokémon table in `common_rel` (pokemon-data.md (not yet published), trainers.md (not yet published)).
+- Shadow catch rates and "snagged" flags: the Shadow Pokémon table in `common_rel` (pokemon-data.md, trainers.md (not yet published)).
 - Species catch rates: the species table.
 
 ## Changing it
 
 - A Shadow Pokémon's difficulty to snag is one byte in its Shadow record: a mod can change it without touching the
   species.
-- A new ball needs a new case in `fn_80213E94` keyed by its item id (the multiplier is code, not data).
+- A new ball needs a new case in `wsCmdEF` (0x80213E94) keyed by its item id (the multiplier is code, not data).
 
 ## Efficiency
 
 Two square roots per throw (the classic Gen 3 integer-friendly shake formula); everything else is integer maths.
+
+### Random numbers used by a throw (**verified** from the code)
+
+The shake checks draw from the game's shared random-number generator, and **the loop stops at the first failed
+check**. So a throw uses **no draws** when the catch is certain (Master Ball, the tutorial snag, or odds of 255 or
+more), and otherwise **one draw per shake plus the one that fails, at most four**. The number of draws therefore
+depends on the catch rate, the ball and the Pokémon's HP and condition: changing any of them shifts every random
+number that follows in the battle ([rng.md](../engine/rng.md)).
+
+### Where each part of the odds comes from 
+
+| Part | Read from | Kind |
+|---|---|---|
+| A normal Pokémon's catch rate | its species record (status 0x12) | data |
+| A Shadow Pokémon's catch rate | its Shadow Pokémon record, byte +0x00 (overrides the species rate) | data |
+| The ball's multiplier | a switch on the ball's item id inside the throw command | **code** |
+| Always-caught cases | the Master Ball and battle 17 (the tutorial snag) | **code** |
+| HP and condition factors | the battle Pokémon's current state | runtime |
 
 ## Region notes
 

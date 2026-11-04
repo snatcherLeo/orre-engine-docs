@@ -19,10 +19,10 @@ or special, its label sprite, its name, and its row of the type chart. The chart
 
 | Offset | Field | Accessor |
 |---|---|---|
-| +0x00 | u8 **category**: 1 physical, 2 special, 0 neither | `fn_8010C4A0` |
+| +0x00 | u8 **category**: 1 physical, 2 special, 0 neither | `zokuseiDataBiosGetCategory` (0x8010C4A0) |
 | +0x02 | u16 **label sprite** id: the coloured type label the battle menu (`menuFightDrawSecretPokemonStatus`) and the move list / summary (`pokemonToMenuWazaStatus`) draw | `fn_8010C46C` |
 | +0x04 | u32 **name** message (developer-style short names: NORMAL, FIGHT, ..., ELECTR, PSYCHC, ?) | `fn_8010C4D4` |
-| +0x08 | u16[18] **type-chart row**: the result of this type attacking each defending type | `fn_8010C508` (`zokuseiGetWazaJoutai`) |
+| +0x08 | u16[18] **type-chart row**: the result of this type attacking each defending type | `zokuseiDataBiosGetAisyou` (0x8010C508) (`zokuseiGetWazaJoutai`) |
 
 Category on the disc: types 0-8 physical, 10-17 special, "???" 0. So **the physical / special split is data** in
 Colosseum (Gen 3 hard-codes "type below ???" = physical); the damage formula, the type-boosting items, Hustle's
@@ -31,7 +31,7 @@ accuracy rule and the AI all ask this byte.
 ### The chart values
 Each entry is a **result id** (shared with the move-condition ids the battle uses for messages): 0x3F neutral (x1),
 0x41 super effective (x2), 0x42 not very effective (x0.5), 0x43 no effect (x0). The type check applies one entry per
-defending type (`fn_802279F8`: damage x 20 / 10, x 5 / 10 or x 0, at least 1 unless immune) and records the result,
+defending type (`_fightSeqApplyAisyouToDamage` (0x802279F8): damage x 20 / 10, x 5 / 10 or x 0, at least 1 unless immune) and records the result,
 which drives the "super effective" / "not very effective" messages, Wonder Guard (only result 0x41 hits) and the
 "no effect" handling. **Verified identical to Gen 3's chart**: all 110 non-neutral pairs match the public Emerald
 source's `gTypeEffectiveness` (pret/pokeemerald, read 2026-10-16), with no differences. Gen 3 keeps the chart as a
@@ -44,7 +44,7 @@ and handles Foresight in code (battle-engine.md, "Type effectiveness").
   summary draw these. "???" has its own pill (0x5D). The colour is part of the picture (no colour table).
 - **Battle Mode badges** (`lbl_802EDB40`, 18 u16 sprite ids 0x2C9-0x2D9): small 23 x 17 two-letter badges from
   texture `menu_047` in `toolbattle_menu.fsys` (entry 0x0CA11200), used only by one Battle Mode menu callback
-  (`fn_800643D4`, four moves). "???" has no badge of its own there and borrows Steel's.
+  (`menuTaisenDrawPokemonStatus` (0x800643D4), four moves). "???" has no badge of its own there and borrows Steel's.
 - **Sprite records** (`lbl_802E7CE8`, 0x18 bytes each): +0x08 x, +0x0A y, +0x0C width, +0x0E height on the sheet,
   +0x10 the texture's entry id, +0x14 the next sprite.
 
@@ -60,9 +60,9 @@ Conversion, Camouflage, Color Change, Transform), the terrain table (Camouflage)
   normally.
 - Used by exactly one move in the data, **Curse** (move 174), and by no species (both checked against the US disc's tables); Curse's script deals no damage, as in Gen 3. Struggle and
   Shadow Rush are not "???": their data type is Normal (0), and they skip the type check entirely (battle-engine.md).
-- Code skips it on purpose: the AI's type-quality score loops over all types except 9 (`fn_8010C54C`).
+- Code skips it on purpose: the AI's type-quality score loops over all types except 9 (`zokuseiGetAisyouScore` (0x8010C54C)).
 - So slot 9 is a complete, unused type entry: the natural place for a new type (below). XD, the sequel, does add a
-  Shadow type; whether it uses this slot is for the XD decomp to show (**guess**).
+  Shadow type; whether it uses this slot is for the XD decomp to show.
 
 ### Hidden Power (`pokemonGetMezamerupower`, 0x80120B00; **verified** from the target assembly)
 Gen 3's formula, unchanged. It reads the six IVs (status 0x93-0x98); with *a* = the lowest bit of each IV and *b* the
@@ -83,7 +83,7 @@ would call it from the move list's type icon.
    or Sp. Atk / Sp. Def; type-boosting items by the item / type table; then the chart, per defending type
    (battle-engine.md, "Damage" and "Type effectiveness").
 3. The AI estimates damage with the same code, so the chart reaches the AI automatically; it also rates a type with
-   `fn_8010C54C` (+10 / -10 per strong / weak matchup, skipping "???") and checks specific types in many value
+   `zokuseiGetAisyouScore` (0x8010C54C) (+10 / -10 per strong / weak matchup, skipping "???") and checks specific types in many value
    functions (for example Rain Dance counts the Water types on its side).
 
 ## Changing it
@@ -95,12 +95,12 @@ physical / special.
 - *Reusing slot 9 ("???"): mostly data.* Set its category, give it a name message, fill its chart row and its column
   in the other 17 rows, it already has a label pill (0x5D, drawn as "???": redraw it on `menu005`) and a Battle Mode
   badge (today Steel's: a new badge on `menu_047` and its sprite id in `lbl_802EDB40[9]`). Then give moves and species that type id. Code that would
-  still treat it specially: the AI's `fn_8010C54C` (skips 9), Curse (the only "???" move: it would become the new type, which
+  still treat it specially: the AI's `zokuseiGetAisyouScore` (0x8010C54C) (skips 9), Curse (the only "???" move: it would become the new type, which
   matters for STAB, type-boosting items and the type label, so re-type it, e.g. to Ghost as later games did), and Hidden Power's type formula (it never produces Normal or ???, see "Hidden
   Power": a type in slot 9 would need that formula changed to be reachable).
 - *A 19th type: code changes.* The chart is a fixed-width matrix: the lookup refuses defending types >= 18
   (`typeB >= 0x12`) and every record is 0x2C bytes (8 + 18 x 2), so widening it means a new record size and a new
-  bound in `fn_8010C508`; the count (`lbl_80478B38`) and the badge sprite table (0x24 bytes = 18 entries) must grow,
+  bound in `zokuseiDataBiosGetAisyou` (0x8010C508); the count (`lbl_80478B38`) and the badge sprite table (0x24 bytes = 18 entries) must grow,
   and the new type needs a new label pill on `menu005` and a new sprite record, not only a name message;
   every 18-entry or type-indexed array elsewhere must be found and widened (the type-boosting item table has 17
   rows; the AI's per-type checks; messages).

@@ -5,7 +5,7 @@
 Status: **partial** (2026-10-17). The runtime side of the characters standing in a room: how the game
 picks who the player talks to, what happens during a conversation, and how characters block the player. Where they
 stand and which scripts they have is room data (game-data-tables.md (not yet published), "Character (NPC placement) record"). Code:
-`src/game/people/people.c` (`peopleFindTalkTarget`, `fn_8018CB5C`), `hero_move.c` (`updateChat`). **Verified** from
+`src/game/people/people.c` (`peopleFindTalkTarget`, `peopleRegisterHumanCollision` (0x8018CB5C)), `hero_move.c` (`updateChat`). **Verified** from
 the decomp's C unless marked.
 
 ## What it does
@@ -39,6 +39,33 @@ every active person and keeps the best candidate:
 
 If nobody qualifies, the examine planes of the room's collision are checked instead (signs, doors; collision.md).
 
+The distance is measured to the person's **head joint** on its model and the angle against the player's stored
+heading, so what counts is where the model stands, not only the person's position record (**verified**: moving the
+record alone left the head, and so the talk check, at the old spot).
+
+**Talking to someone who wanders** (**verified** from a console capture of the people in one room
+against a second run of the same inputs): people with the wander movement type can be talk targets too, and the talk
+check only sees where they stand at the frame of the A press. Their walks draw from the shared random generator
+(rng.md), so anything that changes earlier draws moves the wanderer, and the same press can then miss: in the
+compared run the wanderer stood about 9 units from its console spot, the player's first A press opened nothing, and a
+later one started the talk 78 frames late. Which rule refused the first press (the 40-degree angle or the reach) was
+not checked (**likely** the angle, since the distances were close). For a speedrun or a replay this makes a talk with
+a wanderer one of the places where a different random history changes the outcome.
+(**likely**, from the people table read every frame in one room): Each wanderer keeps a **home point
+and a radius** next to its current target, and the targets it picks stay within that circle (one in The Under's
+square: home (-29, -76), radius 15, its target exactly 15 units out). So a wanderer's random walk can only block the
+player inside its own circle. In The Under's square that circle covers the walk from the lift's foot to the side
+ramp, which is why a different random history there turns into a blocked or diverted walk again and again.
+
+## Trainers who spot the player (**verified** from the code and a replay)
+A room script can ask, every frame of its main loop, whether a person sees the player: `peopleGazeHeroCheck(group,
+index)` is `peopleCanSee(person, range 3, the player, view 30 degrees)`: the player must be within **30 units**
+(10 x the range) of the person, within **15 degrees either side** of the way the person's **model** faces, and with
+no human-collision cylinder in between (radius from the NPC info, 4 by default). When it says yes, the script takes
+over: Phenac's version freezes the player (event mode), plays the person's surprise animation, walks them up to the
+player and runs their talk, which ends in the battle (`fightStartEncount`). A wandering trainer is caught only while
+facing the player at that moment, so where it wandered decides whether, and when, the battle starts.
+
 ## A conversation (`updateChat`)
 1. The pad's pressed / repeat state is cleared so the A press doesn't carry into the text box, and the field is put
    into event mode (`heroMoveInitEventChat`).
@@ -56,7 +83,7 @@ position and rotation from the record, the collision cylinder (below), visibilit
 record's types:
 - **movement type** (bits 0-2 of byte 0): 0 and 1 stand still (no idle behaviour set here); **2 = wander**: pick a
   random point **15 units** from its home spot, walk there, pause **5 to 8 seconds** (5 + 3 x a random fraction; counted in seconds from the frame rate, **likely**),
-  pick again (`fn_80183B44`, `fn_80184D80`; a person that bumps into something turns around); **3** = only the 5-8
+  pick again (`peopleStartWander` (0x80183B44), `peopleMoveWander` (0x80184D80); a person that bumps into something turns around); **3** = only the 5-8
   second idle timer with no wander radius (**likely** turning or looking around in place, `fn_801839A0`);
 - **talk start type** (byte 1 bits 6-7): 1 and 2 set people flags 0x10 and 0x20 (**likely** "turns to face the
   player" variants); 3 = can't be talked to (the talk-target test skips it, above);
@@ -67,8 +94,29 @@ The movement script (+0x10) runs separately (scripted walkers); its trigger is n
 
 ## Collision with people
 A person whose NPC info asks for it (collision type 1) gets a **cylinder** in the human-collision system when it is
-created: the info's radius, a fixed **height of 17** (`fn_8018CB5C`). The player's movement tests against these
+created: the info's radius, a fixed **height of 17** (`peopleRegisterHumanCollision` (0x8018CB5C)). The player's movement tests against these
 (player-movement.md), so NPCs block the way like walls.
+
+## Data structures
+
+- **The people pool:** one flat array of 0xDC-byte person entries, 48 of them (sized once at boot; memory.md "Fixed
+  pools and limits"); each holds the model, script thread, flags, position and walk state (details under
+  "Efficiency" below).
+- **NPC info records** (one per character type): head joint, motions, body radius, collision type, walk / run cycle
+  distances (animation-catalog.md (not yet published), player-movement.md).
+- **Placement records** in each room's module: who stands where, with which talk start type and flags.
+
+## Flow
+
+Room entry sets people up from the room's placement records ("Setting people up on room entry"); each frame their
+scripts and movement run; pressing A picks the person to talk to ("Choosing who to talk to") and runs a conversation
+(`updateChat`); scripts move, show, hide and animate people through the natives.
+
+## Disc data
+
+- **Placements:** the room module's tables in each room's archive (rooms.md (not yet published)).
+- **NPC info and character names:** `common_rel` tables (game-data-tables.md (not yet published)).
+- **Models:** the overworld character models in `people_archive` and the room archives (fsys-catalog.md).
 
 ## Changing it
 - **Talk range and angle** are the two arguments in `updateChat` (1.2 and 40); a port "easier talking" option
@@ -76,10 +124,19 @@ created: the info's radius, a fixed **height of 17** (`fn_8018CB5C`). The player
 - **A non-talkable NPC**: talk start type 3 in its placement record (data).
 - **A counter clerk** needs the talk-through-walls bit (data), or the counter's collision stops the talk.
 
+### Mod surface
+- **Data it reads:** NPC placement records (info index, name, scripts, position, flags), NPC info (model, typing sound
+  kind), the people archive's models.
+- **Hooks it would need:** talk range and angle (an "easier talking" option), walk-cycle swaps per NPC, and new NPCs
+  placed by mods.
+- **Fixed-size limits:** 48 people per room (memory.md, the fixed pools).
+- **Must stay vanilla in GameCube-accurate mode:** placements, wandering (it draws from the shared generator), talk
+  range.
+
 ## Efficiency
 - One linear pass over the people pool per A press, with the cheap tests (flags, distance, angle) before the
   wall sweep.
-- People share one fixed pool (`fn_8018E920(maxPeople)` sets its size at field start), so no allocation happens
+- People share one fixed pool (`peopleSystemInit(maxPeople)` (0x8018E920) sets its size at field start), so no allocation happens
   while walking around a room.
 - The pool is one flat array (**verified** from code; `lbl_8047B200`, count `lbl_8047B1F8`) of
   **0xDC-byte** person entries (`PeopleEntry`, `include/game/people/people.h`), reached by index (`peopleGetEntry`:
@@ -88,6 +145,10 @@ created: the info's radius, a fixed **height of 17** (`fn_8018CB5C`). The player
   must change every walker with it (a PC port with 8-byte pointers hits exactly this: its entries grow to 256 bytes).
 
 ## Open questions
-- Exactly what people flags 0x10 / 0x20 / 0x40 do (talk start / end behaviour), and people flag 1.
+- People flags 0x10 / 0x20 / 0x40 (**verified** from `std054_characterTalk` /
+  `std055_characterEndSpeech`): when a person speaks, flag
+  **0x20** turns the whole person to face the player (its facing saved first) and **0x40** turns it back afterwards;
+  flag **0x10** instead turns only the **head** to follow the player, saving and restoring the person's talkable
+  state. Still open: people flag 1.
 - Movement type 3's exact behaviour and when movement scripts (+0x10) start.
 - The size of the people pool.

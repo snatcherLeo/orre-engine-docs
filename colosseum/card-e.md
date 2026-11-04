@@ -4,7 +4,7 @@
 
 Status: **partial** (2026-10-17). The
 e-Reader "Colosseum-e card" feature: a battle facility room in Phenac City, a card menu and a few battle kinds,
-all present on the US disc but **not reachable** in US play. Labels: **verified** / **likely** / **guess** per claim.
+all present on the US disc but **not reachable** in US play. Labels: **verified** / **likely** per claim.
 
 ## The room seen in the attract video
 - **Where it is shown:** the title screen's **attract video** (`movie/autodemo01.thp`, the demo that plays when the
@@ -24,7 +24,7 @@ all present on the US disc but **not reachable** in US play. Labels: **verified*
   and shows the player's battle record; the light pad is the **Virtual Capsule** (**verified** from the decoded
   script's messages; paraphrased).
 
-### Was it repurposed from an earlier room? (open: a **guess** either way)
+### Was it repurposed from an earlier room? (open)
 The idea: the room was first something else (such as a lab where the Snag Machine was made) and later reused as
 the Card e hall. What the US data says (checked 2026-10-17):
 - **Nothing left over from another purpose** (**verified** for what was checked): the room's archive holds only the

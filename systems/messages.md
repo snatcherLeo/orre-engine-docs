@@ -16,7 +16,7 @@ and stores it with `msgctrlSetValue(slot, value)` before the message box prints 
 
 - **Message key:** `key >> 20` is the bank (group) id, `key & 0xFFFFF` is the entry id inside the
   bank (`GSmsgGetGSchar`, `src/game/gs_msg.c`, 0x800FA280). Key 0 means "no text" and returns NULL.
-- **Message manager** `lbl_80478B08` (a pointer; name is a guess): `+0x08` is the head of a linked
+- **Message manager** `lbl_80478B08` (a pointer; the name is only descriptive): `+0x08` is the head of a linked
   list of loaded banks.
 - **Bank** (in memory, as loaded): `+0x00` u16 bank id, `+0x04` u16 entry count, `+0x08` next bank,
   `+0x10` an array of `count` 8-byte entries `{u32 entry id, u32 byte offset}` **sorted by id**.
@@ -25,7 +25,7 @@ and stores it with `msgctrlSetValue(slot, value)` before the message box prints 
   `0x0D`/`0x0E` (move or ability name), `0x0F`/`0x1F`/`0x20`/`0x21` (a Pokémon), `0x1A`/`0x1C`
   (ability name), `0x28` (move name), `0x29` (item name), `0x41` (trainer name). `msgctrlSetValue`
   dispatches on the slot through an 81-case jump table (`jumptable_80363630`), so there are up to
-  81 slot kinds. Slot meanings are guesses from the call sites, not yet from the printer.
+  81 slot kinds. Slot meanings are read from the call sites, not yet from the printer.
 - **What a slot holds (2026-10-15, from `msgctrlSetValue`'s definition and 317 call sites):** each slot id maps to
   one global (`lbl_8047ADC8` .. `lbl_8047AEA4`, about 70). Some store a **number** as a u16 (item / move ids: `0x2D`,
   `0x2E`, `0x39`, `0x4E`, `0x58`, `0x59`, `0x5D`), the rest a full **32-bit value that is often a pointer to a string**
@@ -36,6 +36,15 @@ and stores it with `msgctrlSetValue(slot, value)` before the message box prints 
   pointer-sized type).
   *For modders / translators:* a template's placeholder prints whatever the code last stored in that slot, so a new
   message can reuse an existing slot id only where the code fills it.
+- **What the battle lines' slots hold** (**verified** by reading the slots while a recorded battle's
+  messages showed, against the lines the game printed):
+  - text pointers: 0x0D / 0x0E names (through `GSmsgGetGSchar`), 0x22 / 0x23 the opposing trainer's class and name
+    ("BANDANA GUY" / "GEATS" in "<22> <23> would like to battle!"), 0x16 / 0x17 the species it sends out, 0x14 / 0x15
+    the player's Pokémon's nicknames ("Go! <15> and <14>!"), 0x28 a move name, 0x1B an ability name;
+  - **0x0F and 0x10 hold a field Pokémon record, not text:** the acting Pokémon and its target ("<0F> used <28>!",
+    "<10> fainted!", "<10>'s <1B> hurt <0F>!"); the printer takes the name from the record (its Pokémon's nickname);
+  - 0x2F is a number (the EXP amount in "<0D> gained <0E> <2F> EXP. Points!").
+  - `<0E>` in the EXP line was empty in the battle checked (**likely** the "boosted" word for traded Pokémon).
 
 ### String encoding
 
@@ -88,7 +97,7 @@ the game's own (verified)**; the meanings below follow from those names and are 
 | 0x03 | `KeyWait` | wait for the button |
 | 0x04, 0x05, 0x06 | `RubyStart`, `RubyTop`, `RubyEnd` | furigana (a reading over kanji) in Japanese text |
 | 0x07 | `Font` | font switch (**verified**, [fonts.md](../engine/fonts.md)) |
-| 0x08, 0x38 | `Color`, `Palette` | text colour, colour palette |
+| 0x08, 0x38 | `Color`, `Palette` | text colour, colour palette. (**verified** from `msgctrlColor`): `Color` is followed by **4 bytes**, the colour as R, G, B, A in the text's big-endian byte order; `Palette` takes **1 byte**, an index into a palette table. So these codes are 6 and 3 bytes long with their arguments, and a reader that takes the colour as a native 32-bit value on a little-endian machine gets the bytes reversed (wrong colours on gender symbols and coloured words) |
 | 0x09 | `Wait` | a timed pause |
 | 0x0D, 0x0E, 0x41 | `EvStrBuf0` / `1` / `2` | event string buffers (text filled in by scripts) |
 | 0x0F, 0x10, 0x11, 0x12 | `AttackMons`, `DeffenceMons`, `ClientMos`, `TsuikaMons` | battle names: the attacker, the defender, the Pokémon a message is about, the added-effect target |
@@ -97,7 +106,7 @@ the game's own (verified)**; the meanings below follow from those names and are 
 | 0x1E | `Clientnowork` | a battle placeholder (meaning not read) |
 | 0x1F-0x21, 0x42-0x44 | `SideAttackName` / `SideDefenceName` + `ha` / `wo` / `no` | side names with the Japanese particles は / を / の |
 | 0x22-0x27 | `TrainerType`, `TrainerName`, `TrainerLose`, `TrainerEnename`, `TrainerEnename2`, `TrainerClientno` | trainer class, name, defeat line, opponents' names |
-| 0x28, 0x29, 0x2A | `WazaName`, `ItemName`, `PasoName` | move and item names; `PasoName` (*guess*: the PC, *pasokon*, box name) |
+| 0x28, 0x29, 0x2A | `WazaName`, `ItemName`, `PasoName` | move and item names; `PasoName` not identified yet |
 | 0x2B, 0x2C | `Hero`, `Hizuki` | the player's and the partner's names, always from the save (**verified**) |
 | 0x2D, 0x2E, 0x39 | `Item`, `Item2`, `Waza` | an item or move name by id |
 | 0x2F, 0x30, 0x34, 0x35, 0x45-0x4A, 0x4F | `Digit`, `MenuDigit`, `MenuUDigit`, `MenuHex`, `MenuZDigit` (each with a `2` variant), `MenuFullDigit` | numbers: decimal, unsigned, hexadecimal, zero-padded, full-width |
@@ -115,9 +124,41 @@ the game's own (verified)**; the meanings below follow from those names and are 
 | 0x5B, 0x5C | `LineSpace`, `BaseLineBias` | line spacing, baseline offset |
 | 0x5D, 0x5E | `SndPlay`, `SndWait` | play a sound, wait for it |
 
-Codes 0x0A-0x0C, 0x3A-0x3C, 0x3F and 0x40 have no handler. Each code's flags word has five high bits that most likely
-say whether it takes argument bytes and how it is drawn (*guess*: not read yet); the frequent codes read cleanly
-without any.
+Codes 0x0A-0x0C, 0x3A-0x3C, 0x3F and 0x40 have no handler. Each code's flags word has five high bits, not read yet; the frequent codes read cleanly without any.
+
+### Numbers and the play time in text (**verified** from every branch of `_msgctrlMakeDigit` and `msgctrlTime`)
+
+- **Number modes** (`_msgctrlMakeDigit`): 0 and 5 signed (5 uses a second digit table, **likely** full-width digits),
+  1 unsigned, 2 zero-padded to 10 digits, 3 hexadecimal padded to 8, 4 with a ',' every three digits (the money).
+- **Digits** come from a 16-entry table of character codes (ASCII 0-9 and A-F, at 0x803635F0 in the executable).
+- **Play time** (`msgctrlTime`): "[H]HH:MM", with a third hour digit only from 100 hours on; the ':' is character
+  0x3A.
+- These need ',' ':' and the digits in the font that draws them; on the US disc only the main font has them
+  (fonts.md).
+- **Text built at run time uses the same encoding as the disc's text** (**verified**): the text engine reads every
+  character as a big-endian 16-bit code (the message banks are UTF-16 big-endian), and the buffers the game fills at
+  run time (numbers, the play time, other spliced-in strings) are read the same way. So anything that writes into
+  them must write big-endian 16-bit codes. On the GameCube that is simply the CPU's own byte order; a reimplementation
+  on a little-endian machine must convert (written natively, the ',' and ':' drew as the missing-character box).
+
+### Dialogue sounds (**verified** from code and data unless marked)
+
+- **A typing sound per speaker:** while a message's letters appear, the text system starts a **talking sound** and
+  stops it when the typing pauses or ends (`soundStartSE` / `soundStopSE` in the message update, `gs_msg.c`). Which
+  sound is a small kind number (`msgGetSE`): 0 none, 1 sound 0x57, 2 sound 0x58, 3 sound 0x59, 4 sound 0x497, 5 sound
+  0x498. All five are resident effects (sound group 6, loaded at boot).
+- **Where the kind comes from:** each character's NPC info record holds it in 3 bits of its first byte
+  (`characterModelGetTalkSE`); talking to a person opens the field window with that kind. In the US data: **65
+  records use kind 1** (the male trainer and townsperson models), **32 use kind 2** (the female ones and Rui), **6 use
+  kind 3** (Cipher's admins, the Mt. Battle master, Phenac's mayor, Snagem's boss), 47 none (Pokémon, objects). So the
+  three are **likely** a male, a female and a "boss" voice (from the models that use them, not listened to). Kinds 4
+  and 5 aren't used by any character record.
+- **Per message:** the control code 0x54 (`TalkSE`) sets the kind for the rest of a message (its one argument byte), so
+  a script line can change the voice. Codes 0x3D / 0x3E (`SeOff`, `SeOn`) are empty in the retail code.
+- **Continuing:** at a "wait for the button" point inside a message (`KeyWait`), pressing to continue plays sound
+  **0x24**. Closing the window is the window system's own menu close (its sound group, menus.md (not yet published); **likely**).
+- *Why it matters for a port:* the talking sound is started and stopped by the typing itself, so the text speed setting
+  changes how long it plays; it is never left running after a window closes (`GSmsgFree` stops it).
 
 ### Fonts
 
@@ -208,6 +249,17 @@ separately when a language needs new glyphs ("Translations" above).
   big-endian views; the slot copy of the header is done field by field (the GameCube copies the whole 8-byte header
   over the slot and then overwrites its second word). Getting this wrong crashes `GSmsgFontOpen` at boot (seen in a
   native build).
+
+### Mod surface
+- **Data it reads:** the message banks (entries sorted by id), the fonts, the control-code table, the name tables
+  inserted by placeholders (trainers, Pokémon, moves, items, the player and partner).
+- **Hooks it would need:** a message lookup override (text packs and translations by bank and id), new control codes
+  in the unused slots (bold, highlight; mod text only), a name-case setting at insertion time, and the dialogue sound
+  per character.
+- **Fixed-size limits:** 81 placeholder kinds; the control-code table's slots; text window sizes (line breaks were
+  tuned to the original widths).
+- **Must stay vanilla in GameCube-accurate mode:** every message, the original fonts and widths, typing speed and
+  sounds.
 
 ## Efficiency
 

@@ -31,7 +31,7 @@ the "new" picture while it is clear (**verified**; no room script sets these fla
 
 The checks run in a fixed order (Shadow record 0x43 first, then 0xADA, 0xADB, 0x42C, 0xAD3, 0xAD0, 0xACF), so the
 first one found set wins; that order is **likely** the story order, newest first. A certain state of Shadow record 0x43
-(`fn_801EEAD0(0x43)`) also selects news 4 (**likely**: a news story about that Shadow Pokémon).
+(`darkPokemonCheckFlag12(0x43)` (0x801EEAD0)) also selects news 4 (**likely**: a news story about that Shadow Pokémon).
 
 ## Flow
 1. `std182_tvNewsEvent`: pick the broadcast as above, set its "seen" flag, update the screen

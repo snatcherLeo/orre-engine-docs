@@ -4,7 +4,7 @@
 
 Status: **partial** (2026-10-14). Code: `src/game/gs_res.c` (GSresInit, GSresGetResource,
 GSresRegisterResource, GSresAllocResource, GSresAllocResourceAlign; all matched) and
-`src/game/gs_thread_hi_range_800F8268.c` (`fn_800F9210` release, matched; `fn_800F92D4` lookup by id, matched).
+`src/game/gs_thread_hi_range_800F8268.c` (`fn_800F9210` release, matched; `GSresFindById` (0x800F92D4) lookup by id, matched).
 Every function on this page byte-matches the game, so **Data structures, Flow and the key conventions are
 *verified*** (read from matching C). Usage remarks ("usually a group id") are marked *likely* inline.
 
@@ -33,8 +33,8 @@ Table: `lbl_8047AC5C` (pointer to an array), `lbl_8047AC60` (entry count), `lbl_
 - `GSresInit(count)`: allocates `count * 0x14` bytes from GSmem, locks it, and clears every
   entry's data pointer.
 - `GSresGetResource(key1, key2)`: linear scan for a live entry with both keys; returns `data` or 0.
-- `fn_800F92D4(key2)`: same scan but matches `key2` only (used as a fallback, for example in
-  `fn_80176C04`: try `GSresGetResource(group, id)`, then `fn_800F92D4(id)`).
+- `GSresFindById(key2)`: same scan but matches `key2` only (used as a fallback, for example in
+  `cameraGetResAnimFrame` (0x80176C04): try `GSresGetResource(group, id)`, then `GSresFindById(id)`).
 - `GSresRegisterResource(ptr, key1, key2, val)`: refuses duplicates, takes the first free slot,
   stores `handle = 0` (not owned), the pointer, the keys and `val`.
 - `GSresAllocResource(size, key1, key2, val)` / `...Align(...)`: refuses duplicates, takes a free
@@ -49,7 +49,7 @@ Table: `lbl_8047AC5C` (pointer to an array), `lbl_8047AC60` (entry count), `lbl_
 **Known key conventions** (from `floorReadMapPostFunc`, `src/game/field_range_80114AE0.c`): map
 models are registered under `(owner, (param & 0x7FFF0000) | 0x1000 | index)` and lights under
 `(owner, (param & 0x7FFF0000) | 0x1600 | index)`. Menu face textures use group `0x5C0`
-(`fn_8010B5C4`).
+(`_menuFaceLoad` (0x8010B5C4)).
 
 ## Disc data
 
@@ -68,6 +68,13 @@ arguments matched only because the first two argument registers still held them)
   real struct with pointer-sized fields; the offsets above give that struct directly.
 - What would break (*verified*): duplicate keys are silently refused (register returns, alloc returns NULL),
   so a mod that re-registers a key must release it first.
+
+### Mod surface
+- **Data it reads:** the resource keys registered by each loader (models, textures, lights, cameras, fonts, banks).
+- **Hooks it would need:** wrap `GSresGetResource` so a mod can substitute any named resource (the general asset-swap
+  hook: models, textures, light sets).
+- **Fixed-size limits:** the registry's table size; one entry per key (duplicates refused).
+- **Must stay vanilla in GameCube-accurate mode:** every key and what it resolves to.
 
 ## Efficiency
 

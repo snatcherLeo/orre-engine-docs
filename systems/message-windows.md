@@ -100,6 +100,25 @@ case** (the code is the Japanese
 **verified**, name-entry.md), START finishes (it sets the done flag
 directly), the repeat bits move the cursor (all **verified** from the handler; the page names are not checked).
 
+### How a text box prints and ends (**verified** from `gs_msg.c`, `msgctrl.c` and frame-by-frame logs of the same scene on a GameCube emulator and a native build)
+- **Printing:** each game frame the box's task reads codes from the message text, **one printable character per
+  retrace the frame lasted** (the loop runs `GSgetFrameStep` times), so a scene running at 30 fps prints two
+  characters per game frame and the reading speed in real time stays the same. A control code (`0xFFFF` then one
+  byte) runs a handler from the control table (`msgctrlcode`, 95 entries) instead of printing.
+- **The box's end is a key wait:** most boxes end with control **0x02, `msgctrlKeyEnd`**. On a frame where the
+  window's key word holds A or B (`winMsgButton` copies it each frame), it is consumed and the next read finds the
+  end of the text (the task's state becomes 2, "finished", and the window's +0x98 byte turns on). On any other frame
+  it **steps the text back 3 bytes**, so the same code is read again next frame: the box simply sits there. Control
+  0x03 (`msgctrlKeyWait`) is **likely** the same idea mid-message (a page break; only its name and table entry were
+  checked).
+- **Consequence for timing:** a key press only ends the box if it arrives on a frame at or after the one where the
+  key wait is reached. A press a frame early doesn't end it, and the box waits for the next press (seen in the logs:
+  a press 2 retraces early cost a 10-frame wait). In a 30 fps scene "one frame" is two retraces, so input timed to
+  the retrace can move a box's end by a whole press interval. This is why a replayed button sequence must reach the
+  game on the same game frame, not only the same retrace.
+- **The window also gates the text:** the window draw passes "hold" to the task unless its flags byte has bit 0x04
+  (set when the window opens, `state = 7`); while held, nothing prints.
+
 ## Text contexts: which code draws which text 
 
 **Every string on screen is a message task** (`gs_msg.c`): something starts a task for a message key at a
@@ -109,9 +128,9 @@ There are only a few **entry points** (**verified**, `gs_msg.c`):
 | Entry point | Arguments | Used by |
 |---|---|---|
 | `GSmsgExec` (through `winMsgDrawMessage`) | key, mode, type | the **message windows** (types 1-9 above): dialogue, battle text, system boxes |
-| `fn_800FB680` | x, y, colour, key | one line inside the current menu item or sprite: by far the most used (about 270 call sites in the C) |
-| `fn_800FB8C8` / `fn_800FBB34` | x, y, width, height, colour, key | text fitted into a box (descriptions, aligned numbers); the difference between the two wasn't read |
-| `fn_800FAEF8` | x, y, colour, printf-style format | developer text: the move viewer, debug screens, the room-change log (`floor.c`) |
+| `GSmsgPrintColor` (0x800FB680) | x, y, colour, key | one line inside the current menu item or sprite: by far the most used (about 270 call sites in the C) |
+| `GSmsgPrintRight` (0x800FB8C8) / `GSmsgPrintRect` (0x800FBB34) | x, y, width, height, colour, key | text fitted into a box (descriptions, aligned numbers); the difference between the two wasn't read |
+| `GSmsgPrintf` (0x800FAEF8) | x, y, colour, printf-style format | developer text: the move viewer, debug screens, the room-change log (`floor.c`) |
 
 **The font is a property of the string, not of the place**: a task starts in font 0 and switches with the control
 code **`<07:NN>`** (font NN, `msgctrlFont` -> `GSmsgSetFontInfo`; fonts.md). So today the same template (for example
@@ -126,15 +145,15 @@ from its file, function and message keys):
 | Field dialogue (people talking, signs, items) | `std054_characterTalk` (`people.c`), `winMsgOpenField*` | message window type 3 |
 | Battle messages | `winMsgOpenFight*` | type 4 (sized to the message) |
 | General / system boxes | `winMsgOpen(1 / 2, ...)`, NPC events type 8, level-up windows types 5 and 9 | window types |
-| **Battle HUD: names, HP, level** | `fn_80011EA4` (`gs_range_80011EA4.c`), the battle status panel's draw callback, by sprite id: **HP** (0xA1 / 0xAC: the animated current value and the maximum, template 0xCB), **level** (0xA2 / 0xAD, template 0xCB), **name and gender sign** (0xA3 / 0xAE: template 0xE9, then ♂ / ♀ with template 0xD0) | `fn_800FB680` |
-| **Move names and the battle menu** | `menuFight.c`: `menuFightDrawWaza` (move name, template 0xE7), `menuFightDrawPP`, `menuFightDrawType`, `menuFightDrawCmdMsg` (FIGHT / POKéMON / ... labels), the timers, and the Shadow / "secret" screens (`menuFightDrawSecret*`) | `fn_800FB680` / `fn_800FB8C8` / `fn_800FBB34` |
-| Pokémon names in menus | party menu `menuPokemon.c` (`menuPokemonDrawItem`), summary and bag `gs_pokemon_summary.c` | `fn_800FB680` |
-| Menus in general | each menu item's **draw callback**, named in the menu tables (`data_802EF0A8.c`; menus.md (not yet published)): `menu/menuCB*.c`, `menu/menu_middle.c` | `fn_800FB680` / `fn_800FBB34` |
+| **Battle HUD: names, HP, level** | `fn_80011EA4` (`gs_range_80011EA4.c`), the battle status panel's draw callback, by sprite id: **HP** (0xA1 / 0xAC: the animated current value and the maximum, template 0xCB), **level** (0xA2 / 0xAD, template 0xCB), **name and gender sign** (0xA3 / 0xAE: template 0xE9, then ♂ / ♀ with template 0xD0) | `GSmsgPrintColor` (0x800FB680) |
+| **Move names and the battle menu** | `menuFight.c`: `menuFightDrawWaza` (move name, template 0xE7), `menuFightDrawPP`, `menuFightDrawType`, `menuFightDrawCmdMsg` (FIGHT / POKéMON / ... labels), the timers, and the Shadow / "secret" screens (`menuFightDrawSecret*`) | `GSmsgPrintColor` (0x800FB680) / `GSmsgPrintRight` (0x800FB8C8) / `GSmsgPrintRect` (0x800FBB34) |
+| Pokémon names in menus | party menu `menuPokemon.c` (`menuPokemonDrawItem`), summary and bag `gs_pokemon_summary.c` | `GSmsgPrintColor` (0x800FB680) |
+| Menus in general | each menu item's **draw callback**, named in the menu tables (`data_802EF0A8.c`; menus.md (not yet published)): `menu/menuCB*.c`, `menu/menu_middle.c` | `GSmsgPrintColor` (0x800FB680) / `GSmsgPrintRect` (0x800FBB34) |
 | **P★DA** | `menu/pda*.c`, `menu/menu_pda_mail.c` | the same |
 | Shops, name entry | `menuShop.c` (`menuShopDrawListText`, ...), `menuNameEntry.c` (`menuNameEntryDrawName`, `...DrawTitle`) | the same |
-| **Title screen** | `gs_title.c` (`fn_800205C8`, `fn_80020EA4`) | `fn_800FB680` |
+| **Title screen** | `gs_title.c` (`fn_800205C8`, `titleDrawOptionHelp` (0x80020EA4)) | `GSmsgPrintColor` (0x800FB680) |
 | GBA link screens, NPC event screens | `gbaCommunication.c`, `gs_npc_event.c` | all three |
-| Window sprites with text | `winSpriteDraw` (`win_sprite.c`) | `fn_800FBB34` |
+| Window sprites with text | `winSpriteDraw` (`win_sprite.c`) | `GSmsgPrintRect` (0x800FBB34) |
 
 **For the port (recommendation, not built):** keep a small "current text context" value. Set it (1) from the window
 type in `winMsgDrawMessage`; (2) from the menu id while a menu's item callbacks run (the menu system knows which

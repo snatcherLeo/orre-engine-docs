@@ -25,15 +25,15 @@ current room's script); the hero-event table (594 records) mostly calls this one
 | 22 / 23 | two other fade kinds (`fadeSet(4 / 5, 0.5)`) | |
 | 10 | keeps one person shown or hidden by two flags, forever: while the first (collected) flag is clear, shows it only when the second (appear) flag is set | the treasure setup, for items with an appear flag (treasure.md) |
 | 11 | a **sign**: open a field message, close it | examine planes (hero-event kind 3) |
-| 12 | a special warp: picks one of three door objects (158-160) by its argument, plays its animation, then links to **room 123 (`D4_out_2`, outside Realgam Tower)** with an auto-event for the arrival (**guess**: a story transition there) | |
-| 13 | opens the **PC box** (records the return point, pushes room 0x391 `pcbox_menu`) | PCs |
+| 12 | a special warp: picks one of three door objects (158-160) by its argument, plays its animation, then links to **room 123 (`D4_out_2`, outside Realgam Tower)** with an auto-event for the arrival | |
+| 13 | opens the **PC box** (records the return point, pushes room 0x391 `pcbox_menu`) | PCs: examine records (kind 3) in the event table, one per PC, in 27 rooms (**verified**). Besides the Pokémon Centers, Mt. Battle's rest areas, The Under's entrance and hotel and two Realgam Tower rooms, they include rooms that are easy to miss: Pyrite's police station, the building's ground floor, the Colosseum lobby, Pyrite Cave's room just before Miror B. (`M2_cave_1F_1`), an Agate house, the Shadow Lab's garage, the Snagem hideout and the unreachable Card e room. A few room scripts also call the PC menu directly; a list built only from room scripts misses most PCs |
 | 14 | waits for a person's motion, then a people helper | |
 | 15 | a short sleep (half a second scaled) | |
 | 16 | uses a Cologne (`std163_useCologne`) | |
 | 17 | runs **evolution** checks | (callers not traced) |
 | 18 | sends mail 10 | |
 | 19 | the shared **TV news scene**: per room, a camera position and the news jingle (or a special song under two story flags), `std182_tvNewsEvent(room)`; also updates one Shadow Pokémon's state by story flags | the TV in houses and the Outskirt Stand shop's first visit (**likely**, the shop plays its own copy) |
-| 20 / 26 | call two code helpers (`fn_80088428`, `fn_80266250`; not traced) | |
+| 20 / 26 | call two code helpers (`fn_80088428`, `evolutionSequenceEnd` (0x80266250); not traced) | |
 | 21 | the **story mail scheduler**: checks pairs of story flags and sends the matching P★DA mail (mails 6, 8, 12-15, 21-24, 27, 28; **likely** once, the mail system skipping a mail already received). It does not set "sent" flags; after some mails it **clears** 2796 / 2797 (`std079`, swapped name). | Outskirt Stand's on-entry function and other rooms (`std209_threadRunScriptMode4(0x05960015)`) |
 | 24, 25 | (not read yet) | |
 

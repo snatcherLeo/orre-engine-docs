@@ -15,7 +15,7 @@ effect types exist; the WZX entry says which one and carries its parameters.
 
 ## Data structures
 
-**Effect slot** (one per running effect; 32 slots, set up at boot with `GSEffectInit(0x20)`, `fn_80130CE0`): id,
+**Effect slot** (one per running effect; 32 slots, set up at boot with `GSEffectInit(0x20)`, `GSeffectInit` (0x80130CE0)): id,
 state (uninitialised / active / stopping), links in a free list and an active list, the effect's user data (its state
 block, allocated per effect from the game's memory system with the size the type asks for), and the callbacks:
 
@@ -39,16 +39,16 @@ block; callback roles follow the function-pointer types in the source, likely):
 |---|---|---|---|---|
 | 0 | filter (`filterStart`) | 0x5C | stop, start, reset, step, update | colour fade over time on models: the attacker, or the **battle room's models** (darkens or tints the arena); colour keys interpolated |
 | 1 | electron | 0x60 | stop, start, reset, update, render | moving electric points |
-| 2 | (`fn_8013A42C`) | 0x24 | start, update, render | arcs between two joints of the owner's model: a curve through four control points with random offsets, redrawn with jitter and a per-frame chance (electric crackle over the body; likely). Its render (`fn_8013A520`) builds curves between model parts |
+| 2 | (`electronEffectCreate` (0x8013A42C)) | 0x24 | start, update, render | arcs between two joints of the owner's model: a curve through four control points with random offsets, redrawn with jitter and a per-frame chance (electric crackle over the body; likely). Its render (`_electronRender` (0x8013A520)) builds curves between model parts |
 | 3 | lightning | 0x70 | stop, start, reset, update, render | lightning bolts drawn as strips |
 | 4 | trace (`tracefx`) | 0x2C | own callbacks | trails (ribbons following a joint) |
 | 5 | leaf | 0x4C | stop, start, reset, update | leaves (an embedded model archive) |
 | 6 | sea | 0xAC | stop, start, reset, update | water surface |
 | 7 | surf | 0xD0 | stop, start, reset, update | wave model |
 | 8 | env map | 0x18 | init, stop, start, reset, update | environment-map shine on the Pokemon |
-| 9 | blur | 0x20 | init, stop, start, reset, update, render | two modes (a flag in its block): **after-images**, redrawing the Pokemon at earlier animation frames with falling alpha (Quick Attack and similar); or **screen blur**, capturing the last frame (GSgfx's back-framebuffer capture) and drawing it over the screen with fading alpha (`fn_8013E258`) |
+| 9 | blur | 0x20 | init, stop, start, reset, update, render | two modes (a flag in its block): **after-images**, redrawing the Pokemon at earlier animation frames with falling alpha (Quick Attack and similar); or **screen blur**, capturing the last frame (GSgfx's back-framebuffer capture) and drawing it over the screen with fading alpha (`_blurDrawCapture` (0x8013E258)) |
 | 10 | aura | 0x34 | init, stop, start, update, render | glow around the Pokemon |
-| 11 | billboard (`patchiru`) | 0x24 | init, stop, start, reset, update | camera-facing textured quads ("patchiru" is Spinda's Japanese name: its spots, guess) |
+| 11 | billboard (`patchiru`) | 0x24 | init, stop, start, reset, update | camera-facing textured quads ("patchiru" is Spinda's Japanese name) |
 | 12 | distortion | 0xB4 | init, stop, start, update, render | screen distortion (heat haze, ripples) |
 
 **Moves seen using type 9** (verified: these move files ran the two blur functions in the PC sweep before they were

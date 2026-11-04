@@ -35,10 +35,10 @@ The selection screen shows two groups of six entries (`fn_800318D8`): group 1 is
    `fn_8002FC58`): one list holding the player's six party slots and the partner's six; a slot can be picked only if
    it holds a valid Pokémon that passes the event check (`menuCBRule_CheckPokemonEventFlag`, 0x80075FEC: **Mew (species 0x97) and Deoxys
    (0x19A) pass only with their event flag set**, the Gen 3 "fateful encounter" bit; every other species passes;
-   the same rule as Battle Mode's, pokemon-data.md (not yet published) "Deoxys in detail"). Picking a Pokémon
+   the same rule as Battle Mode's, pokemon-data.md "Deoxys in detail"). Picking a Pokémon
    opens a two-choice menu (state 3): offer it (state 6) or view its summary (state 5, `fn_80097CD0`); B goes to the
    quit question (state 4: quit -> end, otherwise back to the list).
-3. **Checks on the player's offer** (state 6, `fn_8002F79C`), each with its own refusal message and a return to the
+3. **Checks on the player's offer** (state 6, `gbaTradeCheckExportItems` (0x8002F79C)), each with its own refusal message and a return to the
    list: the held item must be one the item table marks **exportable** (`itemDataBiosCheckExportable`), the Pokémon
    must **not be a Shadow Pokémon**, and the player must **keep at least one other usable Pokémon**
    (`menuPokemonChangeHasOther`; it skips eggs and Pokémon flagged illegitimate, **likely** from the helpers it calls).
@@ -66,6 +66,17 @@ The selection screen shows two groups of six entries (`fn_800318D8`): group 1 is
    failure restores the save image copied before the exchange and says the trade was not saved (memory-card.md).
 10. State 19: asks whether to trade other Pokémon.
 
+## Disc data
+
+The trade screen is its own menu room, `pokemonchange_menu` (room 0x394), with its menu archive and message bank; the
+only script that opens it is in Phenac City's Pokémon Center basement (`M1_pc_B1`) (**verified**, above). The traded
+records themselves come from the save and the link, not the disc.
+
+## Efficiency
+
+A trade works on two player records already in memory (the player's and the partner's 0xB60-byte record) and swaps one
+Pokémon record between them; nothing is loaded for it beyond the menu room (**likely**, from the flow above).
+
 ## Changing it
 - What can't be traded: Mew and Deoxys without the event flag (either side), Shadow Pokémon, Pokémon holding non-exportable items, the player's last usable Pokémon, and
   from the partner eggs and Bad Eggs. These rules are code (state 6 and 8 checks); the exportable bit is
@@ -73,6 +84,13 @@ The selection screen shows two groups of six entries (`fn_800318D8`): group 1 is
 - A port without a GBA: the partner record must be filled some other way (another save file, a network peer); the
   rest of the exchange works on two player records.
 - The friendship reset to 70 is in the exchange code, not in data.
+
+### Mod surface
+- **Data it reads:** the two player records, item exportability, the event-flag rule.
+- **Hooks it would need:** a partner record source other than the GBA (another save, a network peer), and the trade
+  rules (what can't be traded) for mods that add species or items.
+- **Fixed-size limits:** one Pokémon per exchange.
+- **Must stay vanilla in GameCube-accurate mode:** the rules, the friendship reset to 70 and trade evolutions.
 
 ## Open questions
 - Whether the GBA is always on port 2 in a trade (a Dolphin check with a linked GBA would settle it).

@@ -58,17 +58,80 @@ areas (`D2_rest_1-9`) between them and the Pokémon Center (`D2_pc_1F`, room 75)
 - each area offers a **quit** prompt (`std223_askYesNoThenWarp395`): during a Battle Mode run it leaves to the
   Battle Mode menu (room 0x395; pause-menu.md, variable 0x8AE);
 - the battle kinds are **8** (opponents 1-99) and **9** (the 100th), with EXP but no money (battle-engine.md).
+- (**verified** from `D2_pc_1F`'s script and a recorded play session): The **registration** at the
+  base is a three-line menu (the script's custom-menu native): line 0 starts or resumes a challenge (the clerk then
+  asks "new or resume?"), line 1 explains the rules (several pages: ten areas of ten zones, one trainer per zone, no
+  losses, coupons at each area's break room), line 2 or B leaves. The first visit after the story reopens Mt. Battle
+  shows a "training will resume" line once (a story flag) instead of the usual greeting.
+- (**verified** from `D2_valley_1`'s script and the same session): After a win the beaten trainer
+  says one line (it waits for A), then, when the player walks past the next zone's line (the same position check as
+  a trainer's spot, with the zone table's exit entries), the area asks **"Advance to the next ZONE?"**. Yes moves the
+  zone counter on; no offers a teleport back to the registration counter, which warns that the area's wins won't be
+  recorded before it warps.
+- (**verified**, the crater Colosseum's script): The story climb's 100th win gives **1,200 Poké
+  Coupons** and, when two story flags say the party stayed the same, the **Earth Ribbon** for the party; no Pokémon.
+- (**verified**, the Battle Mode result menu `menuCB_range_80062948.c` and `menuSaveLoadReceiveGift`):
+  In **Battle Mode's** Mt. Battle, a loss ends the run only when the continue counter is at zero; otherwise the game
+  offers a continue (some wins add one). Winning the 100th battle gives **Ho-Oh** when the game has been finished, all
+  48 Shadow Pokémon are purified, Ho-Oh hasn't been given before, the team came from the Colosseum save (**likely**, a
+  team-source check) and the memory card is available (**likely**); continues used don't matter. The run's coupons
+  are added at that point.
 The same rooms serve the story's climb and Battle Mode's Mt. Battle (`BATTLEMODE_BATTLEYAMA100`, new-game-flow.md),
 told apart by variable 0x8AE (the game mode: 0 = story, 1 / 2 = a Battle Mode run, **likely** single / double battles; pause-menu.md). Which trainers stand in which area,
 and how the 100 are distributed, is in the area tables (not read yet; **likely** ten per area).
+
+**Battle Mode's progress variables** (**verified** from the area scripts and a recorded run; the
+story climb leaves all of them at 0). The areas are valley 1-3, magma 1-3 and cloud 1-4 (rooms 0x4C, 0x4E ... 0x5E),
+with a rest stop between each two (rest 1-9, 0x4D ... 0x5D) and the crater colosseum (0x5F) at the top; the battles
+happen in each kind's battlefield room (valley 0xD9, magma 0xDC, cloud 0xDA, crater 0xE4), set up through the
+`toolbattle_menu` room (0x397).
+- **0xB59: total wins**, passed to each battle; each area's script sets it to 10, 20 ... 90 when the area is cleared.
+- **0xAFC: areas cleared**, set by each area's script on leaving (valley 1 → 1 ... cloud 4 → 10, the crater → 11).
+- **0xB11: rest stops reached**: rest stop *k* sets it to *k* only when it is *k* - 1, so each stop's event runs once.
+- An area works out its next trainer from the wins (cloud 4: 90 and the wins, so 90 wins = its first trainer).
+How a suspended run stores these is in save-data.md ("A run in progress and a suspended run").
+
+## Battle Mode's colosseums (**verified** from the menu labels and the rule table)
+Battle Mode's Colosseum Battle offers six colosseums, each tied to a level rule (`menuCBBattleKinds`, the rule type set
+for each choice): **Phenac Stadium, Pyrite Colosseum, The Under Colosseum and Orre Colosseum at Lv 50**, **Tower
+Colosseum and Orre Colosseum at Lv 100**. The rules are caps on the team (the built-in rule data holds a maximum level
+of 50 or 100 and a level total of 300 or 600), not a change of level (**likely**, from the rule data and the check
+code). Single or double battles are a separate setting.
+
+**The course list screen** (**verified** from the menu code and a replay frame compared with an
+emulator frame, unless marked). One control routine (`menuBattleModeCourseSelectCtrl`) runs every frame for the list:
+- **The rows.** Each of the six rows gets its name sprite when the course is unlocked, otherwise the "?????" sprite.
+  The level label at the end of a row is printed by the game itself with `sprintf` ("Lv" and the number, or "Lv???"
+  when the course is locked), converted from Shift-JIS to game text and inserted into a message. Courses 3 and 5
+  (the two Orre Colosseum rows) are the ones that can be locked; the others always show their level (50, 50, 50, 100).
+- **The preview picture.** The panel on the right shows the selected course's picture: one of six 238 x 180 cells of
+  a single 716 x 360 texture in the menu's archive (six cells: five arenas, among them a ring of stone pillars in a
+  desert, and one empty cell), picked through a six-entry sprite table in which courses 3 and 5, the two Orre
+  Colosseum rows, share one picture. Which cell is which course beyond Phenac (the blue dome, seen on screen) is
+  **likely** from the pictures, not checked one by one. A locked course shows a "NO DATA" sprite instead.
+- **"Champ!".** Each of the Single Battle and Double Battle rows has a "Champ!" label. It is always drawn, but tinted
+  to 38% (0x60 of 0xFF on every channel) until that course has been cleared in that mode; once cleared it is drawn at
+  full colour, the mode's name turns from grey to white, and two small sparkle sprites appear beside it, turning one
+  degree per frame in opposite directions. So a dim gold "Champ!" means "not won yet" (the player's report: it
+  "glows / sparkles" once completed, **verified** in play).
 
 ## Realgam Tower's Colosseum (first pass)
 `D4_casino_colo` (the story's last Colosseum) runs its rounds differently (**verified** structure): its main loop
 steps through story flags 1139-1143 to pick the next scene, and each round's battle goes through a helper (function
 16, called from **seven** places) that starts **one of two battle ids, chosen by a story flag**: two versions of the
 same opponent. Another function counts how many of **40 consecutive story flags (1262-1301)** are set (**likely**
-the purified flags of Shadow Pokémon 0-39, shadow-system.md; **guess**: a battle's version could depend on whether
-its Shadow Pokémon was already purified). Not read further yet.
+the purified flags of Shadow Pokémon 0-39, shadow-system.md). Not read further yet.
+
+**The Colosseum battle room (room 0x395)** (**verified** from the room table and a replay of a
+recorded Realgam Tower play session unless marked). The registration counter is its own room, whose table row names three callbacks:
+an **init** run on entering (`menuColosseumBattleInit`), a **main** run every frame, and an **exit** run on leaving.
+Init asserts that the room's work area is not already allocated, allocates about 68 KB (0x10F60 bytes) from the game
+heap, locks it and keeps the pointer in one global; exit frees it and clears the pointer, so the room can't be entered
+twice without leaving. Before the first battle the main callback opens the **party check**: every party member goes
+through the rules check (six per-Pokémon checks: legal stats and effort values, not a Shadow Pokémon, not an egg, a
+valid held item, legal moves, a real species; then the whole-party rules), and each slot's icon shows empty, error or
+OK. The window first collects the party's Pokémon into a small seven-slot list (the last slot doubles as the read
+position of the routine that hands the list to the portrait loader) and waits until each portrait is loaded.
 
 ## Battle Mode's versus screen (`menu/menuCB_BattleStart.c`; **verified** code, use **likely**)
 Battle Mode (not the story) shows its teams on a **versus / team-entry screen** built on Battle Mode's versus setup
@@ -89,12 +152,36 @@ past it; the table must grow with the cup.
   end of the run, Hyper Mode and the partner's Shadow detection work as in normal story battles
   (battle-engine.md, the battle-kind table; battle-rewards.md). The boss kinds (5 / 7) mark the last round.
 - The arena record gives the stage, the crowd and its music (battle-arenas.md).
+- **The rule record** (**verified** field reads from the rules code, the level values from a
+  replay of that Realgam Tower session): a 0x54-byte record. The game holds **three fixed presets** in a constant
+  table and the **active rule in the save**; picking a preset copies it byte for byte, and the game tells "custom
+  rules" from a preset by comparing the two records whole. Fields read so far (16-bit numbers unless said):
+  **+0** lowest level allowed, **+2** highest level allowed (preset 2: 1 to 100), **+4** the highest total of the
+  party's levels, **+6** the fewest Pokémon the party needs, **+0xC** (byte) duplicate species allowed when non-zero,
+  **+0xD** (byte) duplicate held items allowed when non-zero, **+0xE to +0x13** six single-byte switches read by
+  their own accessors (meaning not traced yet), **+0x14** the battle's time limit in minutes (the game multiplies it
+  by 60), **+0x16** the per-turn command time limit. A party passes when every Pokémon passes six checks (legal
+  stats and effort values, not a Shadow Pokémon, not an egg, an allowed held item, legal moves, a real species), each
+  Pokémon is inside the level range with an allowed item, and the whole party meets the totals and clauses.
+  The records keep the disc's byte order wherever they are, which a port has to respect (**verified**: read as
+  little-endian numbers, a level floor of 1 became 256 and no Pokémon could enter Realgam Tower's Colosseum).
 
 ## Changing it
 - **New cups or new opponents**: script data only. Change the battle ids the entrance script writes into its
   globals, or add a set and a story-flag condition that picks it.
 - **Longer or shorter runs**: the counter (4) and the loop in the entrance script.
 - **Rules** (pooled money, boss handling): the battle kind of each battle, in the battle table.
+- **Entry rules** (level range, level total, party size, clauses, time limits): the rule record (above); a preset
+  edit changes every challenge that uses it, the save's copy changes only the current one.
+
+**Mod surface** :
+- *Data records:* the entrance scripts and their battle-id globals; the battle table's kinds; the three 0x54-byte
+  rule presets and the save's active rule record.
+- *Hooks it would need:* a rule-check hook (to add a rule beyond the six per-Pokémon checks and the party totals);
+  a preset-table hook for more than three presets.
+- *Fixed sizes:* three presets; a 0x54-byte rule record; a party of six; four rounds per run.
+- *Must stay vanilla in GameCube-accurate mode:* the presets, the checks and their order, the room's portrait
+  waits (they take real time on the console).
 
 ## Open questions
 - Which story flags pick each cup in each Colosseum, and what clearing a cup unlocks.

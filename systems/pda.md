@@ -15,6 +15,12 @@ clusters are found here with some cut out).
 
 ## Data structures
 - **Scene work** `gPdaSceneWork` (0x803A6818, `PdaSceneWork`, 0x248 bytes): the P★DA's menu models and camera.
+  (**verified** from the code unless marked): Two menu model records (gfx.md, "Menu model
+  pictures") at **+0x7C** and **+0xC4**, the two models shown side by side, which `pdaModelFrameCamera` frames
+  together; the scene's model at +0xE8; a camera at +0x114 with its position (+0x118), rotation (+0x124) and
+  perspective (+0x13C..+0x148); and two **map-object ids at +0x10C and +0x150** that the Strategy Memo hides again
+  when it closes (`std114_mapObjectSetVisibility(id, 0)` and the object's model made invisible). What those two
+  objects are in the room is not yet known.
 - **Model windows** `gPdaModelWindow` (`PdaModelWindow`, 0xA0): a window with its own 3D model, alpha and fade.
 - **Strategy Memo list** `gPdaMemoSpecies` (a u16 per memo entry, filled from the memo's save data, section 12, by
   `memoDataGetPokemonID`; bit 0x8000 marks a **new** entry, the species is the low 14 bits) and the memo's
@@ -27,7 +33,7 @@ clusters are found here with some cut out).
   (`fn_801EEFAC`, record +0x04) and captions the entry with that trainer's nickname for it, or with the species name
   when the trainer field is 9, which is the **Card e trainer placeholder** (trainer 9 in the trainer table: a
   Japanese "Card e trainer" name and no party; **verified** from the table), so Card e Shadow Pokémon have no
-  fixed nickname to show (**likely**; the helper read is a second, unused copy in the decompiled code; pokemon-data.md (not yet published)). So this is **likely** the P★DA's Shadow Pokémon list.
+  fixed nickname to show (**likely**; the helper read is a second, unused copy in the decompiled code; pokemon-data.md). So this is **likely** the P★DA's Shadow Pokémon list.
 - **Number input** `gPdaNumberValue`: clamped to a range, built digit by digit.
 
 **The memo's save data** (save section 12; **verified**, `memo.c`): a u16 count, then 12-byte
@@ -39,9 +45,9 @@ Ho-Oh, Plusle in `hero_pokemon.c`), **evolution** (the evolved form, and the ext
 `pokemonSetOnZukanFlag(pokemon, caught)` (0x80123368; **verified** from the target assembly), which adds the memo
 entry, sets the Pokédex "seen" status (0x62) and, when `caught` is set, "caught" (0x63). That function runs in two
 ways: when a Pokémon that is not the player's own enters battle (`fightOutPokemonSetOnZukanFlag(pokemon, 0)`, from
-the battle-start entry `fightActionFlowKaisiNyuujouPokemon` and a later send-out, `fn_8021F458`), but only when the
+the battle-start entry `fightActionFlowKaisiNyuujouPokemon` and a later send-out, `wsCmd4E` (0x8021F458)), but only when the
 battle kind's "record as seen" rule is on (floor status 0x1E, the `DoZukanMita` flag); and from the snag command
-(`fn_80213A78`) with `caught` = 1. So the memo records the first individual of each species the player **sees** in
+(`wsCmdF0` (0x80213A78)) with `caught` = 1. So the memo records the first individual of each species the player **sees** in
 battle (opponents' Pokémon, Shadow ones included), plus starters, gifts, evolutions and trades; snagging needs no
 separate path.
 `memoDataSetMemoFlag` clears every "new" bit and returns whether any entry was new (script command
@@ -50,7 +56,7 @@ separate path.
 ## Flow and features
 - **Opening:** `menuPdaOpen` pushes room 0x392 and the caller's thread waits until the P★DA is closed.
 - **Mail** (field-steps.md for when mail arrives and the mail record): the mailbox list (`pdaMailGetMailID(index)`),
-  sorted by subject with the standard `qsort` and a comparison on the subjects' text (`fn_8004BE90`); the first time a
+  sorted by subject with the standard `qsort` and a comparison on the subjects' text (`pdaMailCompareSubject` (0x8004BE90)); the first time a
   mail is viewed its read effects run (story flag, mail stage, Shadow records, script, hero event).
 - **Strategy Memo:** the list above, with the 3D view of the recorded Pokémon and its cry (`pdaPushCry`) and type
   icons (`pdaGetTypeIcon`).

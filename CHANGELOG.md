@@ -2,6 +2,25 @@
 
 The docs are published in batches. Each entry lists what changed for readers: new pages and notable corrections.
 
+## 2026-11-05: fourth batch
+
+- New page: **Battle camera** (`systems/battle-camera.md`): who controls the camera in a battle, when each shot is
+  chosen, and how the camera draws from the shared random numbers.
+- New page: **Pokémon data** (`systems/pokemon-data.md`): the one numbered accessor every species and individual
+  Pokémon field is read through, and what each selector returns.
+- **Battle turns** (`systems/battle-turn-flow.md`, `systems/battle-engine.md`): the whole battle phase by phase, Call
+  and Hyper Mode, the action data lists, where a battler's state lives, and the damage, PP and secondary-effect steps.
+- **Random numbers** (`engine/rng.md`): which part of the game draws from the shared generator during a battle, from a
+  draw-by-draw console capture.
+- **Graphics** (`engine/gfx.md`): frames with no display copy keep their picture, the dimmed scene behind menus, and
+  the screen shape the game assumes.
+- **Disc reads** (`engine/disc-files.md`): how an archive entry is loaded, archives kept in the auxiliary memory (ARAM), one load at
+  a time, and which reads hold up a frame on the console.
+- **Saves and storage** (`systems/save-data.md`, `systems/bag-and-pc.md`): the Strategy Memo's records, comparing
+  two saves, the PC's menu and the item count limits.
+- More on trainer encounters and ambushes, the new-game flow's timings on the console, Colosseum challenges, Shadow
+  Pokémon, screen transitions and memory, plus many smaller corrections and a "Mod surface" list on more pages.
+
 ## 2026-10-17: third batch
 
 - New page: **Player appearances** (`colosseum/player-appearances.md`): the places Colosseum shows the player

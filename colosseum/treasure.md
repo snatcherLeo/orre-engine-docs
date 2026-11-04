@@ -25,6 +25,12 @@ The three looks are the character models `t_box_00`, `kirari` (with its shadow s
 59-61), all in `field_common`. In the US table: 45 boxes, 23 sparkles, 5 books; **26** records have an appear flag (the
 keys, discs and TMs that turn up once the story gets there, and the Lab's DNA boxes).
 
+**One item, several spots (verified):** records can share a collected flag, so they are one item that can sit in
+different places; picking it up in one place removes it everywhere. The Pyrite police station's **Jail Key** has two
+records: the station's script shows the first while the windmill is broken (its appear flag is set from the gear going
+missing until the building's floors) and the second only after the cave battle against Miror B. The Lab's DNA samples
+work the same way: three collected flags, each shared by four records, one per layout.
+
 **Reward kinds** (`floorEventGetTresure`, after the pick-up jingle):
 
 | Kind | What happens |
@@ -44,6 +50,11 @@ keys, discs and TMs that turn up once the story gets there, and the Lab's DNA bo
    and sound; the item is marked collected (flag set), the look updated, and the reward given.
 3. **Scripts can change a record's contents** before the player finds it (`floorEventChangeTresure(index, item,
    count)`; the table lives in RAM, so this lasts until the module reloads).
+4. **Finding a record** (`floorEventGetTresureList` / the lookup inside `floorEventCtrlTresure`): the character id's
+   low bits are the n-th record *of the current room*, so the lookup walks the whole table counting only records whose
+   room id matches. An item can sit on furniture: in the Pyrite Colosseum lobby one stands on the reception counter
+   (y = 11), and examining it from in front of the counter is how the player collects it (**verified** in a recorded
+   play session: the press turns Wes to the counter, sets the collected flag and opens the "found" box).
 
 ## The Lab's random DNA samples (**verified**)
 The one randomised treasure in the game, and the only use of `floorEventChangeTresure`:

@@ -6,7 +6,7 @@ Status: **partial** (2026-10-14 night). The keyframe format is decoded and verif
 material and light animations use the same format but have not been decoded yet.
 Code: `src/hsd/hsd_aobj_range_801C01C8.c` (AObj, ForeachAnim), `src/hsd/hsd_dobj.c` (FObj load / interpret).
 **How sure:** the track format is read from the decompiled HSD code and decoded on every room camera on the disc
-(*verified*); remarks on purpose are marked *likely* or *guess* inline.
+(*verified*); remarks on purpose are marked *likely* inline.
 Reference: Melee `sysdolphin/baselib/aobj.c`, `fobj.c`, `cobj.c`, `wobj.c` (same library).
 
 ## What it does
@@ -72,7 +72,7 @@ the eye and interest WObjs (x, y, z, or `path` = position along a spline, 0..1).
   as the title, top menu and world map), 514 tracks (*verified* counts): mostly SPL (2,536 keys), then CON (646),
   SPL0 (533), SLP (117), LIN (11); no KEY in cameras. Values are often 16-bit fixed point (positions with 3-8
   fraction bits), slopes 8- or 16-bit.
-- 358 tracks end exactly on the clip's last frame; 151 run exactly 10 frames past it (exporter padding, *guess*).
+- 358 tracks end exactly on the clip's last frame; 151 run exactly 10 frames past it.
 
 ## Changing it
 
@@ -82,6 +82,15 @@ the eye and interest WObjs (x, y, z, or `path` = position along a spline, 0..1).
   which is the basis for an animation viewer.
 - What would break: changing a track's value format without re-encoding its keys; key counts above the pack
   info's range are fine (it is variable-length).
+
+### Mod surface
+- **Data it reads:** each animated object's track chain (one track per property: key frames, values, interpolation),
+  in room cameras, joint, material and light animations.
+- **Hooks it would need:** none to play new tracks (the format is general); a read-out of the original keys for a
+  viewer and editor, and a way to substitute a track by object and property.
+- **Fixed-size limits:** none in the format itself (variable-length keys); per-file limits come from the scene's own
+  archive.
+- **Must stay vanilla in GameCube-accurate mode:** every original track and its timing.
 
 ## Efficiency
 

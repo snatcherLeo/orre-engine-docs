@@ -29,12 +29,12 @@ line format (address, back chain, saved link register).
 ## Flow
 1. **At boot** (`fn_80006250`): `OSSetErrorHandler` for system reset, machine check, DSI, ISI, alignment, floating
    point, performance monitor, breakpoint, system interrupt and thermal interrupt; and, **only when no debugger is
-   attached** (`fn_800A2C58 == 0`), also for program, system call and trace exceptions (so a developer's debugger
+   attached** (`DBIsDebuggerPresent == 0`, 0x800A2C58), also for program, system call and trace exceptions (so a developer's debugger
    keeps those).
 2. **On an exception** (`fn_80006378`): save the error number and arguments, copy the context, install a recovery
    handler (`fn_800064A0` reloads a context), re-enable the scheduler and start a thread for the report.
 3. **The report** (`fn_800064C4`): error name, two pairs of context words (likely the faulting address and the
-   instruction address, `SRR0` / `DAR`-style; **guess** which is which), the two OS arguments, then a stack trace walked
+   instruction address, `SRR0` / `DAR`-style; which is which is not identified), the two OS arguments, then a stack trace walked
    through the back-chain pointers.
 4. **Fatal checks** (`fn_800060F0(file, line, format, ...)`): format the message, append ` in "file" on line n.`, then a
    stack trace of up to 32 frames from the current stack pointer. Callers pass their source file names, so the

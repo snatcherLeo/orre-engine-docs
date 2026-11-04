@@ -4,7 +4,7 @@
 
 Status: **partial** (2026-10-16). A map of every Shadow-specific battle rule, with links to where each is
 described, plus how the heart gauge goes down. Shadow data structures (Shadow ids, the Shadow table, the Pokémon's
-gauge fields) are in pokemon-data.md (not yet published). *Dark* = Shadow, *Dp* = heart gauge, *relive* =
+gauge fields) are in [pokemon-data.md](pokemon-data.md). *Dark* = Shadow, *Dp* = heart gauge, *relive* =
 purification, *seikaku* = nature. All claims **verified** from the byte-matched code unless marked; nothing here has
 been watched running yet.
 
@@ -20,16 +20,16 @@ Shadow catch rates for snagging, and a heart gauge that the battle lowers.
 
 | Rule | Where | Page |
 |---|---|---|
-| **Shadow Rush** is move 356 (effect 48, recoil of a quarter of the damage: **likely**; uses no PP); move 357 is the locked-move placeholder, substituted by the move getter by gauge level ("Locked moves" below) | move data, `fn_802128D0` | battle-engine.md, "How a move picks its script" |
+| **Shadow Rush** is move 356 (effect 48, recoil of a quarter of the damage: **likely**; uses no PP); move 357 is the locked-move placeholder, substituted by the move getter by gauge level ("Locked moves" below) | move data, `fightSeqRunWaza` (0x802128D0) | battle-engine.md, "How a move picks its script" |
 | Shadow Rush in Hyper Mode crits 90% of the time | critical check | battle-engine.md, "Critical hit" |
-| Shadow Rush skips the type check: always neutral, no STAB | `fn_802274F0` | battle-engine.md, "Type effectiveness" |
-| **Hyper Mode** (condition 0x3E) starts only when Shadow Rush is used: nature x gauge-level chance | `fn_8022EDEC` mode 0 | battle-turn-flow.md 3d |
-| In Hyper Mode: seven misbehaviours before other moves (nature +0x0B..+0x11); 1 / 256 self-recovery; reminder each turn; refuses items | `fn_8022A6C8`, `fn_8022EDEC` | battle-turn-flow.md 3d |
-| **Call** (action priority 2): wakes a sleeper; ends Hyper Mode (always, in the US data) | `fn_80212D6C` | battle-turn-flow.md 3c |
+| Shadow Rush skips the type check: always neutral, no STAB | `fightSeqWazaTypeCalc` (0x802274F0) | battle-engine.md, "Type effectiveness" |
+| **Hyper Mode** (condition 0x3E) starts only when Shadow Rush is used: nature x gauge-level chance | `_fightCheckDarkPokemonAppear` (0x8022EDEC) mode 0 | battle-turn-flow.md 3d |
+| In Hyper Mode: seven misbehaviours before other moves (nature +0x0B..+0x11); 1 / 256 self-recovery; reminder each turn; refuses items | `_wsHitCheckSub` (0x8022A6C8), `_fightCheckDarkPokemonAppear` (0x8022EDEC) | battle-turn-flow.md 3d |
+| **Call** (action priority 2): wakes a sleeper; ends Hyper Mode (always, in the US data) | `fightActionCallMain` (0x80212D6C) | battle-turn-flow.md 3c |
 | Rui spots Shadow Pokémon at battle start | `fightCheckRuiShadowSense` | below |
 | The battle kind's Hyper Mode rule (floor status 0x31) switches all Hyper Mode behaviour off | | battle-turn-flow.md 3d |
-| Shadow Pokémon bank EXP (gauge level 3 or more) instead of gaining it | `fn_802232F4` | battle-rewards.md |
-| Snagging uses the Shadow record's own catch rate | `fn_80213E94` | battle-snag.md |
+| Shadow Pokémon bank EXP (gauge level 3 or more) instead of gaining it | `wsCmd23` (0x802232F4) | battle-rewards.md |
+| Snagging uses the Shadow record's own catch rate | `wsCmdEF` (0x80213E94) | battle-snag.md |
 | The heart gauge drops when the player's Shadow Pokémon enters battle, and on a successful Call | below | |
 
 ## Rui's detection (`fightCheckRuiShadowSense(pokemon, side)`, run for every Pokémon at battle start; **verified**)
@@ -57,7 +57,7 @@ Shadow catch rates for snagging, and a heart gauge that the battle lowers.
   only from level 3 (battle-rewards.md); a Shadow Pokémon's **friendship** is a separate value (status 0xC7) that
   only changes from level 3, from any source including items (`pokemonGetFriendFormPokemonFriendFilterId`,
   `itemUse2PokemonSimulation`); and its **nature** is shown only from level 3, a placeholder message (0x934) before
-  (the GBA-link status screen, `fn_8009567C`; the console menus likely do the same).
+  (the GBA-link status screen, `menuStatusDrawPokemonInfo` (0x8009567C); the console menus likely do the same).
 - **Gauge drop table** (`pokemonDpFilterDataBiosGetPtr`, in `common_rel`): one signed amount per event kind
   ("filter id").
 - **Nature purification rates:** each nature names a **rate record** per event kind
@@ -77,7 +77,7 @@ Shadow catch rates for snagging, and a heart gauge that the battle lowers.
 |---|---|---|
 | 0 | the Shadow Pokémon is sent into battle (once per battle: status 0xD1; only the player's own) | battle start / send-out (`fightCheckRuiShadowSense`) |
 | 1 | walking: every 256 steps, counted per Shadow record | `field_exact_801ED3B8.c` (the step handler) |
-| 2 | a successful Call ends its Hyper Mode | `fn_80212D6C` |
+| 2 | a successful Call ends its Hyper Mode | `fightActionCallMain` (0x80212D6C) |
 | 3 | daycare (step count, like walking) | `field_exact_801ED3B8.c` |
 | 4 | a scent is used on it | `gs_title.c` (menu side) |
 | 5 | empties the gauge | no caller found (main.dol and the 25 room modules the decomp builds, of about 170 on the disc): **likely** unused |
@@ -94,9 +94,14 @@ move records from the executable:
 - `lbl_80478B58` = move **356, Shadow Rush** (PP 5, PP-ups 0), and
 - `lbl_80478B5C` = move **357, the "?" placeholder** (PP 5, PP-ups 0).
 
-The substitution applies when the Pokémon has a Shadow record, its gauge is not negative, and it does **not** belong
-to an enemy trainer (its trainer-Pokémon id is 0: the player's own, after a snag; **likely** cleared by the snag), and
-it depends on the gauge level (`pokemonGetDarkPokemonLevel`: 0 = full, then one level per 20% down, 6 = empty):
+The substitution applies when the Pokémon has a Shadow record and its gauge is not negative. Then there are two cases:
+
+- **Any Shadow Pokémon, the enemy's included:** slot 1 is always shown as **Shadow Rush**. An enemy trainer's Shadow
+  Pokémon therefore fights with Shadow Rush plus its **real** moves in slots 2-4; its stored slot-1 move is never
+  available to it.
+- **The player's own** (its trainer-Pokémon id is 0, after a snag; **likely** cleared by the snag): slots 2-4 are
+  also shown as "?" until the gauge falls far enough, by gauge level (`pokemonGetDarkPokemonLevel`: 0 = full, then one
+  level per 20% down, 6 = empty):
 
 | Slot (code index 0-3 = slots 1-4) | Shown as | Until |
 |---|---|---|
@@ -116,13 +121,13 @@ Shadow Rush's place and every move is visible.
 wants different unlock points changes `pokemonBiosGetPokemonWazaPtr`. The two fixed records are data in `main.dol`.
 
 **The "purified" flag** (**verified**): each Shadow record (`common_rel` Shadow table, 0x38
-bytes) names a story flag at **+0x14**; `fn_801EECD8(id, 1)` sets it at purification and `fn_801EEC74(id)` reads it
+bytes) names a story flag at **+0x14**; `darkPokemonSetFlag14(id, 1)` (0x801EECD8) sets it at purification and `darkPokemonCheckFlag14(id)` (0x801EEC74) reads it
 ("is this Shadow Pokémon purified?", used for example by the walking and day-care gauge code). `fn_801EE398` checks
 that all 48 Shadow Pokémon of the list `lbl_80375240` are purified: one of the conditions of the Ho-Oh gift
 (menu-rooms.md, "Gift Pokémon").
 
 ## Purification (`reliveCeremonyAll`, the Relic; **verified** from code)
-1. The Shadow record is marked purified (`fn_801EECD8(shadowId, 1)`), Hyper Mode is cleared if set, and the gauge is
+1. The Shadow record is marked purified (`darkPokemonSetFlag14(shadowId, 1)`), Hyper Mode is cleared if set, and the gauge is
    set to -1.0 (the "purified" value, below empty).
 2. Sound 0x3F7 and the ceremony messages play.
 3. **The banked EXP is announced and applied** (`_expRecover`: levels gained, with their moves), the EXP from

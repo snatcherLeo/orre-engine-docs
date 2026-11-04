@@ -11,7 +11,7 @@ Format of the archives themselves: [disc-files.md](../engine/disc-files.md). Res
 floor-resources.md (not yet published).
 
 **Evidence labels:** *name* = from the archive or entry names; *contents* = from the entry types;
-*code* = from the decomp; *guess* = a reasonable reading that nothing confirms yet. A blank cell
+*code* = from the decomp. A blank cell
 means unknown.
 
 ## How the game finds an archive
@@ -27,7 +27,7 @@ means unknown.
   misspelled names such as `wzx_awa_attck` next to the real `wzx_awa_attack`): leftovers from
   development. *disc*
 - Inside an archive, an entry is found by its **entry id** (entry +0x00, compared with the
-  request id in `fn_8017E30C`). Entry ids are global, not per archive: the same model
+  request id in `fsysLoadEntrySync` (0x8017E30C)). Entry ids are global, not per archive: the same model
   (`ken_b1`, id 0x00F7) has the same id in every archive that carries a copy. *disc*
 
 ## Entry types
@@ -44,7 +44,7 @@ The type code at entry +0x20 is the index into the floor resource-type table `lb
 | 3 | collision (`floorReadCol*`) | 124 | one per walkable room | name |
 | 4 | BGM sequence (`floorReadBGM*`; MusyX song, music.md (not yet published) "Song file format") | 78 | `battle2_song`, all in `bgm_archive` | name |
 | 5 | message bank (`floorReadMsg*`) | 168 | room name, `fight`, `system_tool`, `pocket_menu` | name; [messages.md](../systems/messages.md) |
-| 6 | font (`floorReadFont*`) | 162 | paired with each message bank; `jis_1` (648 KB) | name; JIS = Japanese kanji font (guess) |
+| 6 | font (`floorReadFont*`) | 162 | paired with each message bank; `jis_1` (648 KB) | name |
 | 7 | script (`floorReadScript*`) | 175 | one per room or menu | name; [script-vm.md](../systems/script-vm.md) |
 | 9 | texture (`floorReadTex*`) | 1,487 | `menu_*`, `body001`, `face001`, logos | name |
 | 10 | particles (`floorReadParticle*`; GPT1 banks, [particles.md](../engine/particles.md)) | 52 | `*_bg_effect`, `*_ptl`, `*_pati` | name |
@@ -62,7 +62,7 @@ Types 8, 11 and 13 have no callbacks and appear in no archive.
 
 ### common (id 0x0A, 32 entries)
 
-Loaded for the whole game (guess: at boot; to confirm from the caller that requests id 0x0A).
+Loaded for the whole game.
 
 | Entry | Type | What it is |
 |---|---|---|
@@ -74,7 +74,7 @@ Loaded for the whole game (guess: at boot; to confirm from the caller that reque
 ### field_common (id 0x0B, 7 entries)
 
 Overworld (field) assets used in every map: `ken_b1` and `hizuki_b1` (object models; the player and
-Rui, guess from *hizuki* and the player model being in every field archive), `bbook`, `bikkuri00`
+Rui: *hizuki* is Rui's internal name, bag-and-pc.md), `bbook`, `bikkuri00`
 ("!" surprise icon; *bikkuri* = surprise), `kirari` (sparkle), `t_box_00` (treasure box), and texture
 `menu_040`.
 
@@ -89,8 +89,8 @@ Battle assets: message banks and fonts `fight` and `tool_fight`, camera `cam_par
 |---|---|---|---|
 | people_archive | 0x009a | 157 object models | every NPC / trainer overworld model (name: *people* = NPCs; names match the models in room archives) |
 | bgm_archive | 0x0099 | 78 BGM sequences | all music (name) |
-| poke_body | 0x048a | 826 textures | `bodyNNN` and `bodyNNN_c`: Pokémon full-body pictures, probably normal and alternate (shiny?) per species (guess) |
-| poke_face | 0x05c0 | 418 textures | `faceNNN`: Pokémon face portraits (`pokemon-data.md` (not yet published), portraits) |
+| poke_body | 0x048a | 826 textures | `bodyNNN` and `bodyNNN_c`: Pokémon full-body pictures, two per species |
+| poke_face | 0x05c0 | 418 textures | `faceNNN`: Pokémon face portraits (`pokemon-data.md`, portraits) |
 | chara_big / chara_small | 0x05c3 / 0x05c4 | 88 / 10 textures | character portraits (name) |
 | camera_shake_data | 0x0634 | 9 type-2 entries | shake presets short/medium/long × weak/medium/strong (name) |
 | waza_sequence_global | 0x06f7 | 2 not-linked particles | sleep and freeze loops used by any move sequence (name) |
@@ -109,7 +109,7 @@ Battle assets: message banks and fonts `fight` and `tool_fight`, camera `cam_par
 | waza_menu | script, msg, font, tex | move menu (name: *waza* = move) |
 | world_map | rel?, script, msg, font, map, models, 15 cams `cam_move_demo_*`, tex | world map and the bike travel scenes (name; `bike_*` models) |
 | evolution | map | evolution scene (name) |
-| colosseumbattle_menu, colosseumbattleconnection_menu, toolbattle_menu | menus, msgs, fonts, tex | menus for Colosseum-mode battles, link battles, and quick battles (name; guess for *toolbattle*) |
+| colosseumbattle_menu, colosseumbattleconnection_menu, toolbattle_menu | menus, msgs, fonts, tex | menus for Colosseum-mode battles and link battles (name); `toolbattle_menu` not identified yet |
 | pokemonchange_menu | `poke_exchange_*`, `p_exchange` | trading (name) |
 | pokecoupon_menu, ex_coupon | | Poké Coupon exchange (name); `ex_coupon` is Bonus Disc content (verified from the bonus-disc images) |
 | carde_menu, M1_carde_1 | `card01_bin`...`card21_bin`, `card_e`, `jis_1` | e-Reader battle cards (*Card e*; a Japan-only feature, *likely*: the US game has no way into the Card e room, regions.md) |
@@ -118,7 +118,7 @@ Battle assets: message banks and fonts `fight` and `tool_fight`, camera `cam_par
 | debug_menu | REL module `debugMenuData` | debug menu (name) |
 | waza_viewer | rel `waza_viewer_rel`, `M1_water_colo` map | developer move-animation viewer (name; [regions.md](regions.md) build kind 2) |
 | genius_logo, nintendo_logo | one texture each | boot logos (name) |
-| pokemon_logo, opening_demo, auto_demo, staffroll | one generic entry `dummy` | placeholders for screens that play `.thp` movies instead ([movies.md](../engine/movies.md); guess). (verified) The `dummy` entry in all four is the same 97,704-byte file, a Unix `ar` static library of ELF objects: the developers' own movie library (`GSAPI\GSmovie`: GSmovie, THPRead, THPDraw, THPPlayer, THPAudioDecode, THPVideoDecode, THPDec, THPStats, THPAudio; 66 exported names), probably used as a filler file when the archives were built. A slightly different build than the one in main.dol; its names give the movie player's original function names |
+| pokemon_logo, opening_demo, auto_demo, staffroll | one generic entry `dummy` | screens that play `.thp` movies instead ([movies.md](../engine/movies.md)). (verified) The `dummy` entry in all four is the same 97,704-byte file, a Unix `ar` static library of ELF objects: the developers' own movie library (`GSAPI\GSmovie`: GSmovie, THPRead, THPDraw, THPPlayer, THPAudioDecode, THPVideoDecode, THPDec, THPStats, THPAudio; 66 exported names), probably used as a filler file when the archives were built. A slightly different build than the one in main.dol; its names give the movie player's original function names |
 | keydisc | 32-byte `key` | |
 | mail000..002 | one texture each | mail stationery (name) |
 
@@ -158,7 +158,7 @@ the floor table, game-data-tables.md (not yet published)), and every prefix maps
 | M4 | 5 | The Under (includes the Under subway) | bottom_colo, cylinder_colo, subway, junk, kanpo, labo, train, hotel | verified |
 | D1 | 6 | Shadow Pokémon Lab | garage, labo | verified |
 | D2 | 7 | Mt. Battle | cloud, crater_colo, magma, valley, rest_1..9, present_room, pc | verified |
-| D3 | | (none on the disc) | | **skipped**: probably a dungeon cut during development (*guess*). In XD the D3 prefix is reused for the S.S. Libra (xd-insights.md). |
+| D3 | | (none on the disc) | | **skipped**. In XD the D3 prefix is reused for the S.S. Libra (xd-insights.md). |
 | D4 | 8 | Realgam Tower | tower, dome_1..11, casino_colo | verified |
 | S2 | 10 | Team Snagem Hideout | bossroom, building, hallway, snatchroom, out | verified |
 | T1 | 9 | a stand-alone Colosseum battle arena (Orre Colosseum most likely) | ancient_colo | decided from the code, see below |
@@ -190,7 +190,7 @@ ancient), matching the seven `wzx_colo_name_*` effects that are not in the toc.
 
 - **`pkx_<name>` (527 archives):** one PKX entry each. Names are romanized Japanese species names
   (`achamo` = Torchic, `absol`) and trainer / character battle models (`agent_m_a1`, `hizuki_a1`).
-  Species pick their model through `pkxDataId` (`pokemon-data.md` (not yet published)).
+  Species pick their model through `pkxDataId` (`pokemon-data.md`).
 - **`wzx_<move>_<part>` (1,108 archives, 1,091 loadable):** move animations split into parts
   (`_attack`, `_damage`, `_special`, `_sp1`, `_status`, ...), named after the romanized Japanese
   move names (`10manvolt` = Thunderbolt).

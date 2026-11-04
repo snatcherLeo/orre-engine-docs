@@ -57,10 +57,12 @@ story-dependent variable (likely shops 0-2, whose stock grows from status heals 
 and 4, Pyrite 5, Agate 6, The Under's mart 7, its herb shop 8 and its vending machine 10, Mt. Battle's counter 13. Shops
 11 and 12 are opened by the Poké Coupon menu (`menuPokeCouponMain`, `src/game/menu/menu_poke_coupon.c`: choice 0 opens
 11, choice 1 opens 12, then it returns to room 0x395, `colosseumbattle_menu`, the Battle Mode menu) (*verified*, code + floor table;
-new-game-flow.md): the Poké Coupon exchange of Battle Mode, outside story mode (*likely*). Every shop, 9 included, is also reachable from a
+new-game-flow.md): the Poké Coupon exchange of Battle Mode, outside story mode (*likely*; an
+emulator walk of the menus found "PokéCoupon Exchange" in Battle Mode's Solo Battle menu). Their stock is the same as
+Mt. Battle's counter (shop 13). Every shop, 9 included, is also reachable from a
 developer test menu (`fn_8000CF68` next to `dbgMenuMenuTestPokemonMenu` in `src/game/gs_party_access.c`, a 14-entry key →
 shop table at `lbl_80266700`) (*likely* debug-only). Shop 9 (the TM list alone) is opened by no room script and no
-player menu found so far (*guess*: unused in the retail game).
+player menu found so far.
 
 ## Disc data
 
@@ -77,6 +79,13 @@ Choice Band carry a large coupon price and a token normal price).
 - Because the module is relocatable, growing a table moves everything after it; a mod tool should rebuild the section
   and its relocations rather than patch in place.
 
+### Mod surface
+- **Data it reads:** shop records (stock list, prices from item data) and the Poké Coupon exchange lists.
+- **Hooks it would need:** none for stock and price edits (data); a stock list merge so several mods can add items to
+  one shop.
+- **Fixed-size limits:** the shop count and the stock-list area (+0x304 / +0x308).
+- **Must stay vanilla in GameCube-accurate mode:** every shop's stock and prices.
+
 ## Efficiency
 
 The whole shop data is under 1 KB and is only loaded with the pocket_menu module.
@@ -89,4 +98,4 @@ The whole shop data is under 1 KB and is only loaded with the pocket_menu module
 
 ## Region notes
 
-Message ids only; the tables hold no text, so they should be the same in other regions (*guess*, not compared).
+Message ids only; the tables hold no text. Other regions are not compared yet.

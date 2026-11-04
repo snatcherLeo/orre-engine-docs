@@ -4,10 +4,10 @@
 
 Status: **partial** (2026-10-14). A pattern used all over the `gs_*` engine, not a single
 subsystem. Code: `src/game/gs_material.c` (GSmaterialCreate, matched), `src/game/gs_light.c`
-(GSlightLoad, matched), `src/game/gs_render_util.c` (`fn_800D27FC`, `fn_800D29A0`),
+(GSlightLoad, matched), `src/game/gs_render_util.c` (`GScameraCreateFromDesc` (0x800D27FC), `GScameraCreate` (0x800D29A0)),
 `src/game/gs_gapp.c` (GSgappCreate).
 Every create function named here byte-matches the game, so **the pool table, slot sizes, in-use flags and the
-fields listed are *verified*** (read from matching C); interpretations are marked *likely* or *guess* inline.
+fields listed are *verified*** (read from matching C); interpretations are marked *likely* inline.
 
 ## What it does
 
@@ -22,15 +22,14 @@ means clearing the in-use flag.
 |---|---|---|---|---|
 | Materials | `lbl_8047AB1C` / `lbl_8047AB20` | 0x40 | byte 0 | GSmaterialCreate |
 | Lights | `lbl_8047AAEC` / `lbl_8047AAF0` | 0x74 | byte 0 | GSlightLoad |
-| Cameras | `lbl_8047AA6C` / `lbl_8047AA70` | 0x128 | byte 0 | `fn_800D27FC` (from a desc), `fn_800D29A0` (defaults) |
+| Cameras | `lbl_8047AA6C` / `lbl_8047AA70` | 0x128 | byte 0 | `GScameraCreateFromDesc` (0x800D27FC) (from a desc), `GScameraCreate` (0x800D29A0) (defaults) |
 | gapp tasks | `lbl_8047AC7C` / `lbl_8047AC80` + `lbl_8047AC84` | 0x18 | word at +0x08 (state) | GSgappCreate |
 | Resource registry | see [resources.md](resources.md) | 0x14 | data pointer at +0x04 | GSresRegister/Alloc |
 | Floor requests | see floor-resources.md (not yet published) | 0x24 | word at +0x08 | six request functions |
 
 Known slot fields:
 
-- **Material:** +0x00 in use; +0x02 u16 cleared; +0x10..+0x1C set to 0, 1, 2, 3 (*guess*: per-stage indices); +0x20/+0x24/+0x28 cleared; +0x38 and +0x3C set to `0xFEFEFEFE` (sentinels; *guess*: "unset" markers
-  for colors or pointers). Logs a message when the pool is full.
+- **Material:** +0x00 in use; +0x02 u16 cleared; +0x10..+0x1C set to 0, 1, 2, 3; +0x20/+0x24/+0x28 cleared; +0x38 and +0x3C set to `0xFEFEFEFE` (sentinels). Logs a message when the pool is full.
 - **Light:** +0x00 in use; +0x08 = the light description passed in; +0x0C = the HSD light object
   from `HSD_LObjLoadDesc`; +0x02 = has animation (when the desc's second word is nonzero);
   then animation rate (+0x64) and mode (+0x5C).
@@ -48,6 +47,17 @@ Create = inline "find first free slot" helper (early return) + fill fields. The 
 are recovered from the matched code (*verified*). Destroy paths
 are not documented yet.
 
+(**verified** from the code, `gs_gapp.c`): **how the gapp tasks run.** The three task states are
+three ways of running: **1, per frame**: `GSgappUpdate` walks the whole list once per pass of the main loop, in
+priority order, calling every unblocked state-1 task (the main game uses 0x00, 0x01, 0x0A the main logic, 0xFD,
+0xFE `mainRetraceLogic` with the window manager and the screen fade, 0xFF the frame's draw); **2, background**: run by
+`gappBackgroundCallback`, the OS's idle function, whenever the main thread is waiting (a disc read, a sleep), and
+that same idle loop merges newly created background tasks (parked on `lbl_8047AC9C`) into the main list; **3, at the
+retrace**: run from the video interrupt (`gappVSyncCallback`). The walk saves each task's successor before calling
+it, so a task removed during the pass (`GSgappTerminate` clears its links) ends the pass early. **Likely
+consequence** (seen once in Dolphin, being traced): a frame in which the 0xFE task isn't reached skips one step of
+the screen fade, so the fade lasts a refresh longer.
+
 ## Disc data
 
 Lights and cameras are created from descriptions inside map archives (*verified*) (see
@@ -61,6 +71,13 @@ Lights and cameras are created from descriptions inside map archives (*verified*
   objects should check for that.
 - A port needs real structs for these slots: today much of the C uses raw offsets.
 
+### Mod surface
+- **Data it reads:** none directly; each system asks for slots as it loads (lights, materials, tasks, threads).
+- **Hooks it would need:** pool sizes from a limits file (more lights per map, more materials), and a loud report when
+  a pool is full instead of the silent failure.
+- **Fixed-size limits:** every pool's count (runtime globals, set once).
+- **Must stay vanilla in GameCube-accurate mode:** the original counts and what happens when a pool runs out.
+
 ## Efficiency
 
 - No allocation or fragmentation at runtime: all memory for these objects is reserved up front (*verified*),
@@ -72,4 +89,3 @@ Lights and cameras are created from descriptions inside map archives (*verified*
 
 - Pool sizes and where they're set (init functions for each subsystem).
 - What the material fields at +0x10..+0x1C are (TEV stage ids?).
-- Exact meaning of gapp task states (state 2 = background or deferred?).

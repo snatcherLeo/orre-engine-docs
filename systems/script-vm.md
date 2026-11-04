@@ -38,7 +38,7 @@ symbols: `cms_op03_pop`, `cms_op05_return`, `cms_op18_negate`, `cms_op19_pushVar
 - `push immediate` (op 08): **a type byte then a 4-byte value** (type 2 = integer, 3 = float; the VM skips the type byte). `jump` (06) / `jump if false` (07): a 4-byte target,
   **relative to the script base** (`ip = base + target`); `jump if false` pops the condition.
 - **Variable operands** are a descriptor byte:
-  - `0` invalid (logs, uses a default value from `lbl_8047E710`);
+  - `0` invalid (logs, uses a default value from a compiler-generated constant at 0x8047E710);
   - bit `0x80`: the value is taken from the stack (popped);
   - otherwise an index is popped and bit `0x40` selects a **local** (`stack[frame + index]`) or, when
     clear, a **global** (`globals[index]`);
@@ -82,13 +82,22 @@ symbols: `cms_op03_pop`, `cms_op05_return`, `cms_op18_negate`, `cms_op19_pushVar
   from each function's code reading those registers): they see whatever the VM's argument arrays still hold from the
   previous native call (an original quirk, *likely* harmless). So a faithful PC dispatcher calls each native by its C
   signature, slot by slot per register kind, exactly like the GameCube trampoline.
-- `yield` (36) most likely suspends the script until the scheduler runs it again (*guess*, from the name: opcode table).
+  (**verified** from the assembly and a Dolphin comparison): The result is simply whatever r3
+  holds when the native returns, so a native can hand a value to the script without "returning" one in any visible
+  way: four natives end with a call and leave that call's result in r3, and the scripts read it. The Mt. Battle
+  registration menu (`std199_menuDisplayCustomMenu`) gives the cursor's line (0 start or resume a challenge, 1 the
+  rules, 2 or -1 leave), `std239_playerGetCouponsEarnedInLastArea` the coupons just earned, `scriptSetMemoFlag`
+  whether a memo was new, and `fn_801C9C9C` the result of `heroMoveChkHinderClear` for the partner (member 1),
+  or 0 when the partner has no resource. A port has to pass
+  those results on explicitly.
+- `yield` (36): its behaviour isn't read yet (opcode table).
 
 ## Opcode table (all 38; operand sizes verified from each `cms_opNN` handler)
 
 Operand kinds: **imm** = u8 type + u32 value; **u32**; **d** = one variable-descriptor byte (see
-"Bytecode encoding"); **u16**. "Meaning" is *verified* where the handler's behaviour was read, *guess*
-where it comes from the handler's symbol name only.
+"Bytecode encoding"); **u16**. "Meaning" is *verified* where the handler's behaviour was read, and *likely* where
+it comes from the handler's symbol name and the decoded room scripts read consistently with it (thousands of
+conditions such as `flag || flag` and `1 == value`). *Open* means not settled yet.
 
 | Op | Name (symbol) | Operands | Meaning | Status |
 |---|---|---|---|---|
@@ -102,27 +111,27 @@ where it comes from the handler's symbol name only.
 | 07 | jumpFalse | u32 offset | pop; jump if 0 | verified |
 | 08 | pushImmediate | imm | push the value | verified |
 | 09-12 | (none) | | empty table slots; executing one would crash | verified |
-| 13 / 14 | and / or | d, d | bitwise and / or | guess |
+| 13 / 14 | and / or | d, d | bitwise and / or | likely |
 | 15 | pushVarRef | d | push a variable's address | verified |
 | 16 | pushMultiVar | d, u16 n | pop a start index, push n consecutive variables | verified |
-| 17 / 18 | not / negate | d | logical not / arithmetic negate | guess |
-| 19 | pushVar2 | d | push a variable | guess |
-| 20-24 | multiply, divide, mod, add, subtract | d, d | arithmetic on two operands | guess |
-| 25-30 | lt, le, gt, ge, eq, ne | d, d | comparisons (push 0 / 1) | guess |
+| 17 / 18 | not / negate | d | logical not / arithmetic negate | likely |
+| 19 | pushVar2 | d | not settled | open |
+| 20-24 | multiply, divide, mod, add, subtract | d, d | arithmetic on two operands | likely |
+| 25-30 | lt, le, gt, ge, eq, ne | d, d | comparisons (push 0 / 1) | likely |
 | 31 | setVar | d (source), d (destination) | assign | verified |
-| 32 | copyStruct | d, d, u16 n | copy n values | guess |
-| 33 / 34 | logical and / or | d, d | && / \|\| | guess |
-| 35 | printf (symbol) | 2 bytes + u16 n | behaves like a call with n stack values (the "printf" name does not fit; open) | guess |
-| 36 | yield (symbol) | 2 bytes + u16 n | same shape as 35; seen as `return op36(30)` at the end of event functions | guess |
+| 32 | copyStruct | d, d, u16 n | not settled | open |
+| 33 / 34 | logical and / or | d, d | && / \|\| | likely |
+| 35 | printf (symbol) | 2 bytes + u16 n | behaves like a call with n stack values in the decoded scripts (the "printf" name does not fit) | open |
+| 36 | yield (symbol) | 2 bytes + u16 n | same shape as 35; seen as `return op36(30)` at the end of event functions | open |
 | 37 | callStandard | 2 bytes + u16 argc | call native `stack[frame]` with the following argc-1 values | verified |
 
 ### Script file (`.scd`, resource type 7)
 
 | Offset | Field | Status |
 |---|---|---|
-| 0x00 | u32 0x01000101 in every script (version? guess) | data |
+| 0x00 | u32 0x01000101 in every script | data |
 | 0x04 | u16 function count | verified (`cms_op04_call` bounds check) |
-| 0x06 | u16 relocation count | verified (fn_800F76E4) |
+| 0x06 | u16 relocation count | verified (`cms_RegisterScript`, 0x800F76E4) |
 | 0x08 | u16 (0xA5 in S1_out) | unknown |
 | 0x0A | u8 "relocated" flag (set to 1 by the loader, in the loaded copy) | verified |
 | 0x0C | u32 offset of the relocation table | verified |
@@ -180,6 +189,15 @@ loaded by the `floorReadScript*` callbacks. Format: "Script file" above.
 The opcode table and the `std*` natives are the natural hooks for mods (new natives, script
 debugging, tracing). Not explored yet.
 
+### Mod surface
+- **Data it reads:** each room's script file (header, functions, constants, globals) and the native-function table.
+- **Hooks it would need:** register new natives (mod commands callable from scripts), a per-instruction trace (the
+  replay inspector), and function-level script patches (replace or wrap one function of a room script).
+- **Fixed-size limits:** 38 opcodes; a 64-entry value stack per thread (pushing past it logs an error and drops the
+  value); the native table's size.
+- **Must stay vanilla in GameCube-accurate mode:** every opcode's behaviour, the natives' results, script timing (one
+  thread step per frame as the original schedules it).
+
 ## Efficiency
 
 Scripts run cooperatively: they execute until they yield, so they cost nothing between yields.
@@ -194,7 +212,7 @@ unknown (see below).
 
 ## Open questions
 
-- The real behaviour of ops 35 and 36 (named printf / yield) and of the guessed arithmetic ops.
+- The real behaviour of ops 35 and 36 (named printf / yield), 19 and 32, and a read of the arithmetic ops' handlers.
 - The header words at +0x00 and +0x08.
 - What the post-instruction countdown loop on +0x28 is for (compiled from `for (d--; d >= 0; d--) {}`
   in the current C; possibly a decompilation artifact).

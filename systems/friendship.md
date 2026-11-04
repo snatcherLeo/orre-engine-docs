@@ -21,13 +21,13 @@ compared byte for byte, 2026-10-16), and the event numbers are Gen 3's:
 
 | Event | Gen 3 name | Where Colosseum uses it |
 |---|---|---|
-| 0 | level up | a level gained in battle (the EXP command, `fn_802232F4`) and levels gained when purification applies the stored EXP (`_expRecover`) |
+| 0 | level up | a level gained in battle (the EXP command, `wsCmd23` (0x802232F4)) and levels gained when purification applies the stored EXP (`_expRecover`) |
 | 1 | vitamin | **never used**: no caller passes it (below) |
 | 2 | battle item | **never used**: no caller passes it (below) |
-| 3 | league battle (Gen 3: gym leader, Elite Four, champion) | **at battle start**, for each of the player's Pokémon entering, when the battle kind's "friendship changes" (status 0x27) and "boss battle" (0x2E) switches are both on (battle-engine.md, "The full picture") and the trainer is the player (`fightActionFlowKaisiNyuujouTrainer`); also for a Pokémon snagged during such a battle (`fn_80213A78`) |
-| 4 | learn TM / HM | teaching a move from the bag's TM screen (`fn_80022834`, after `pokemonWazaCreate`) |
+| 3 | league battle (Gen 3: gym leader, Elite Four, champion) | **at battle start**, for each of the player's Pokémon entering, when the battle kind's "friendship changes" (status 0x27) and "boss battle" (0x2E) switches are both on (battle-engine.md, "The full picture") and the trainer is the player (`fightActionFlowKaisiNyuujouTrainer`); also for a Pokémon snagged during such a battle (`wsCmdF0` (0x80213A78)) |
+| 4 | learn TM / HM | teaching a move from the bag's TM screen (`itemFieldUseTM` (0x80022834), after `pokemonWazaCreate`) |
 | 5 | walking | every 256 footsteps (field-steps.md) |
-| 6 | faint (small) | fainting in battle when no opponent is 30 or more levels higher (`fn_80224158`) |
+| 6 | faint (small) | fainting in battle when no opponent is 30 or more levels higher (`wsCmd19` (0x80224158)) |
 | 7 | faint from field poison | field poison (field-steps.md) |
 | 8 | faint (large) | fainting in battle when the strongest opponent is **30 or more levels higher** (Gen 3's rule, same number) |
 
@@ -52,7 +52,7 @@ Candy, PP Up and PP Max raise it by 5 / 3 / 2; the battle items X Attack, X Defe
 Guard Spec. and Dire Hit by 1 / 1 / 0; the bitter herbal medicines lower it: Energy Powder and Heal Powder by
 5 / 5 / 10, Energy Root by 10 / 10 / 15, Revival Herb by 15 / 15 / 20. No other item carries an amount. The amounts are
 three signed bytes (+5 to +7) in the item's parameter record, which the item record's byte +0x04 selects. The item
-record itself also holds the same three values at +0x24 (pokemon-data.md (not yet published) "Item entry"; identical for every item
+record itself also holds the same three values at +0x24 (pokemon-data.md "Item entry"; identical for every item
 checked: **verified**), but the item-use code reads the parameter record, so a mod must change both copies together
 (**verified** that the use code reads the parameter record; whether anything reads +0x24 is not traced).
 
@@ -88,7 +88,7 @@ friendship is set to **70** (`pokemonBiosSetFriend(.., 0x46)`), whatever it was 
 
 ## What friendship is used for (partial)
 - **Return and Frustration** (**verified**): power = friendship x 10 / 25 (Return, 0-102) and
-  (255 - friendship) x 10 / 25 (Frustration), Gen 3's formulas, in two small helpers (`fn_80217BEC`, `fn_80217BD0`);
+  (255 - friendship) x 10 / 25 (Frustration), Gen 3's formulas, in two small helpers (`fightAiScale10Div25` (0x80217BEC), `fightSeqGetOngaeshiIryoku` (0x80217BD0));
   the power step (`fight_trainer_ai_waza_damage.c`) writes the result as the move's power (move status 0x2F). The
   friendship read is status 0x99 of the Pokémon's party record (`fn_8023842C`), so a Shadow Pokémon's pool (0xC7) does
   **not** count until purification adds it.

@@ -5,7 +5,7 @@
 Status: **partial** (2026-10-17, first pass). Every place Colosseum shows the player (Wes), with **what it loads**
 (3D model, sprite, texture, pre-rendered video) and what a replacement would have to provide. This is the checklist
 for player avatar packages: a replacement character is complete only when every row is covered or has a fallback.
-Labels: **verified** (code, data, or checked in play or in a model viewer), **likely**, **guess**; rows marked **to
+Labels: **verified** (code, data, or checked in play or in a model viewer), **likely**; rows marked **to
 trace** are known gaps.
 
 ## The player's assets
@@ -28,10 +28,10 @@ trace** are known gaps.
 | 4 | **Opening movie** (new game) | **pre-rendered video** (`openingdemo.thp`): Wes escapes the Snagem hideout | can't follow a replacement; an in-engine remake of the scene would use a `ken_c1` replacement | verified (movies.md) |
 | 5 | **Attract video and staff roll** | pre-rendered videos (`autodemo01`, `staffroll`) | can't follow a replacement | verified that they are videos (movies.md); which shots show Wes: likely (seen in the videos) |
 | 6 | **Field** (every room) | `ken_b1`: stand, walk and run from the motion table, turning, the neck look-at toward points (21 script uses), footsteps from the foot parts, script slots 0 and 1 and the surprise reaction | an overworld model with those animations, the head joint index (18 for Wes) and walk / run cycle distances | verified (player-movement.md, animation-catalog.md (not yet published) "Avatar packages") |
-| 7 | **In-engine cutscenes** | the same `ken_b1`, moved and turned by room scripts (character group 0, id 100), framed by the rooms' camera shots | as row 6; the camera shots assume Wes's height (**guess**: a much taller or shorter model may be framed badly) | likely |
+| 7 | **In-engine cutscenes** | the same `ken_b1`, moved and turned by room scripts (character group 0, id 100), framed by the rooms' camera shots | as row 6 | likely |
 | 8 | **World-map travel** | a whole **bike model with the riders built in**, picked by story flag 997 (with Rui, or with the Pokémon) | a bike-with-rider model per variant, or a separate rider attached to the bike | verified (menus.md (not yet published); checked in a model viewer) |
 | 9 | **Battle** | `ken_a1` beside the partner: idle (slot 0), ball throw (1), win / entry (5), the Shadow-related reactions (7, 8), being hit with its follow-up (9), recall / lose (10); face expressions by swapping the face texture | a battle model with those slots filled (2-4 and 6 may repeat the idle) and, optionally, face images | verified (animation-catalog.md (not yet published), trainers.md (not yet published)) |
-| 10 | **Snagging** | Wes-only battle slots 6 and 7 (the Snag Ball throw and its follow-up); the Snag Machine is part of the model | the two snag animations; the Snag Machine, if it should be separate, cut out as its own part | verified for the slots; the machine being part of the mesh: likely |
+| 10 | **Snagging** | Wes-only battle slots 6 and 7 (the Snag Ball throw and its follow-up); the Snag Machine is built into the arm mesh of the battle and walking models, while the opening-cutscene model (`ken_c1`) has it as a separate, hidden part | the two snag animations; a separate machine can come from `ken_c1`'s part, and a model without the built-in machine needs an arm without it | verified for the slots; where the machine sits: likely (not yet checked in a model viewer) |
 | 11 | **Colosseum entrances and battle intros** | the battle model's entry / win slot (5) | as row 9 | verified (slot use, animation-catalog.md (not yet published)) |
 | 12 | **P★DA** | the player model is read by the P★DA code (model id `0xF70400`) | the overworld model | verified that it is loaded (animation-catalog.md (not yet published)); which screen shows it: to trace |
 | 13 | **Party / summary screens** | not traced: whether a trainer model or picture appears | to trace | to trace |

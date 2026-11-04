@@ -12,8 +12,8 @@ constant in this build, so the region logic for other builds is still present in
 
 | Function | Returns (USA) | Meaning (evidence) |
 |---|---|---|
-| `fn_800057A0` (0x800057A0, `src/game/main.c`) | **1** | **Region.** 0 = Japan, 1 = USA, 2 = **PAL** (confirmed by the 50 Hz particle compensation below). Drives the disc and memory-card game codes, the save stamp, and a few content differences. |
-| `fn_800057A8` (0x800057A8) | **6** | **Build kind.** 2 = a developer build: move-animation sequence errors are reported (`fn_801D744C`, wazaSequenceEntry.c); 4 = a build that rewrites the mounted disc id to "GC6J" before card access (a Japanese-disc test build? guess); 6 = this retail build. |
+| `GSgetVersionMajor` (0x800057A0, `src/game/main.c`) | **1** | **Region.** 0 = Japan, 1 = USA, 2 = **PAL** (confirmed by the 50 Hz particle compensation below). Drives the disc and memory-card game codes, the save stamp, and a few content differences. |
+| `GSgetVersionMinor` (0x800057A8) | **6** | **Build kind.** 2 = a developer build: move-animation sequence errors are reported (`wazaViewerSetErrorFlag` (0x801D744C), wazaSequenceEntry.c); 4 = a build that rewrites the mounted disc id to "GC6J" before card access; 6 = this retail build. |
 
 Call sites (35): wazaSequenceEntry (13), wazaViewer (4), wazaSequenceCamera (4), the memory-card
 code in field_range_801CB180 / field_exact_801CFD08 (5), dbgMenu (3), gs_dvd (2), floor (2), hero,
@@ -29,7 +29,7 @@ disc are leftovers of the Japanese extra disc (bonus-discs.md (not yet published
 ## Memory card file (region-dependent part)
 
 - File name **`pokemon_colosseum`**; the card comment is "POKéMON COLOSSEUM" / "SAVE FILE"
-  (`lbl_802792E8`, Latin-1 `é`).
+  (0x802792E8, a compiler-generated constant, Latin-1 `é`).
 - On load, the game scans up to 127 card files and accepts the one whose name matches and whose
   game code matches the region: "GC6J" for region 0, "GC6E" for regions 1 and 2; company code "01".
   So **a Japanese save is rejected by a US game** and vice versa: a cross-region save editor or port
@@ -43,10 +43,10 @@ disc are leftovers of the Japanese extra disc (bonus-discs.md (not yet published
 | Memory-card file game code (`field_exact_801CFD08.c`) | "GC6J" | "GC6E" | "GC6E" |
 | New save's attestation stamp (`hero.c`, `gamedataCreate(save, ver, gen, area, lang)`) | 0xB, 3, **1, 1** | 0xB, 3, **2, 2** | 0xB, 3, **3, 8** |
 | Particles (`field_range_80117E58.c`) | | | one extra particle update every 5th frame: **50 Hz compensation** |
-| Map models (`floor.c`) | | in 15 rooms (ids 3, 0xB-0xE, 0x15, 0x24-0x26, 0x72, 0x75, 0x7B, 0xCA, 0xD0, 0xDE) texture animations are linked to the model animation and given a rate: a **US-only fix** (guess) | |
+| Map models (`floor.c`) | | in 15 rooms (ids 3, 0xB-0xE, 0x15, 0x24-0x26, 0x72, 0x75, 0x7B, 0xCA, 0xD0, 0xDE) texture animations are linked to the model animation and given a rate, in the US build only | |
 
 So the attestation stamp is {version 0xB = Colosseum, generation 3, area, language}; a Japanese
-save says area 1 / language 1, a US save 2 / 2, a PAL save 3 / 8 (8 = multi-language? guess).
+save says area 1 / language 1, a US save 2 / 2, a PAL save 3 / 8.
 
 ## Text and fonts (expected differences; to verify)
 

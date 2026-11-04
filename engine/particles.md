@@ -5,7 +5,7 @@
 Status: **partial** (2026-10-16). The file format is decoded and every bank on the disc reads cleanly;
 what each flag bit means is only partly known. **How sure:** the layouts come from the loader code and the byte-code
 table from the interpreter (`psInterpretParticle0`), both checked against every bank on the disc (*verified*); remarks
-on purpose are marked *likely* or *guess* inline.
+on purpose are marked *likely* inline.
 
 ## What it does
 
@@ -93,7 +93,7 @@ is set (15 bits). Floats are 4 bytes. Multi-byte operands are big-endian.
 | 0xAA | u16, u16 | spawn a random child from a range (id table) |
 | 0xAB / 0xBE | 1 / 3 floats | scale velocity |
 | 0xAC | time, 2 floats | size to value + random over time |
-| 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB4, 0xB5, 0xE2, 0xE6, 0xE7, 0xF7 | | set / clear particle kind bits (0xAD = 0x80 always comes just before an environment-colour command: *likely* "use the environment colour"; 0xAE / 0xAF / 0xB0 / 0xB1 pick bits 0x20 / 0x40: *guess* billboard modes) |
+| 0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB4, 0xB5, 0xE2, 0xE6, 0xE7, 0xF7 | | set / clear particle kind bits (0xAD = 0x80 always comes just before an environment-colour command: *likely* "use the environment colour"; 0xAE / 0xAF / 0xB0 / 0xB1 pick bits 0x20 / 0x40) |
 | 0xB2 | | detach from the parent transform (bake the world position) |
 | 0xB3 | time, 3 bytes | alpha-compare ramp (mode, two reference values) |
 | 0xB6 | time, float | rotate by over time |
@@ -148,6 +148,16 @@ is set (15 bits). Floats are 4 bytes. Multi-byte operands are big-endian.
   the block starts).
 - Ids: commands that go through the id table let an emitter be renumbered by editing the table only.
 - Keep the version at 0x43 and the command block at 0x20; the loader rejects `GPT0`.
+
+### Mod surface
+- **Data it reads:** particle banks (`GPT1`: emitters, their byte-code, texture groups, the id table), from move
+  effect files, the global effect archive and room archives.
+- **Hooks it would need:** a bank substitution by file and emitter id (particle packs, the shared asset library), and
+  a separate random generator for particles a mod adds.
+- **Fixed-size limits:** the particle system's pools (live particles and generators per frame); a full pool drops
+  new particles.
+- **Must stay vanilla in GameCube-accurate mode:** the original banks, and their random draws on the shared
+  generator (particles are the largest single user of it, rng.md).
 
 ## Efficiency
 

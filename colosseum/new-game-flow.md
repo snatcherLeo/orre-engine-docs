@@ -36,7 +36,7 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
    where the top menu runs.
 
    *The memory-card call* (`fn_801D0748(kind, work size, channel)`, `memcard.c`, **verified**; memory-card.md): it starts memory-card
-   task `kind` as a per-frame task (`GSgappCreate(.., fn_801CDB04)`), allocates a 0x1E600-byte work buffer and a
+   task `kind` as a per-frame task (`GSgappCreate(.., memcardTaskMain)` (0x801CDB04)), allocates a 0x1E600-byte work buffer and a
    0xA000-byte card work area, and **yields until the task reports a non-zero result**. Kind 1 is this title load;
    kind 4 (ten callers, **likely** the normal save) and kind 7 (the options save) are others. Results seen in the task code: **4** after a write
    completes (the save count is incremented there), **-1** from the abort state, and 1, 2, 3 and 5 from other check
@@ -45,18 +45,18 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
    finishes with a result (3 for a loaded save, or a value meaning "no save" so an empty one is created).
 
    **The title song drives the attract demo:** a per-frame function (`fn_8001EF78`) checks, in every state from
-   0x1E on except 0xC8, whether the title song is still playing (`soundGetStatus(0x46A)`); when it is not, it sets
+   0x1E on except 0xC8, whether the title song is still playing (`GSsndGetStatus(0x46A)`, 0x801666BC); when it is not, it sets
    the state to 0x28, and the title's main loop (`fn_800203B4`) then links **room 0x39C, `auto_demo`** (the attract
    demo). So on the GameCube the demo starts when the title song ends. *For the port* (**likely**, from the code, not
-   run): if the title song never starts, `soundGetStatus(0x46A)` reads 0 from the first frame of state 0x1E, so the
+   run): if the title song never starts, `GSsndGetStatus(0x46A)` reads 0 from the first frame of state 0x1E, so the
    title leaves for the attract demo right after the logos, or overwrites the state set by START, and the top menu is
    never reached; the title song (or a stand-in that reports "playing") is on the critical path.
-4. **Top-menu room** (0x3A1, `topmenu`): its setup (**likely** `fn_80021644`, which nothing in the C calls; it runs
+4. **Top-menu room** (0x3A1, `topmenu`): its setup (**likely** `titleIntroStart` (0x80021644), which nothing in the C calls; it runs
    only when `fn_800FF548` is 0) starts **`worldmap_song`** (sound 0x446; the
    song's name from the disc's song list), loads the top menu's background model and plays camera animation
-   0x632 (the Orre map fly-over behind the menu, **likely**). The top menu itself is `fn_800210F0`, reached through
+   0x632 (the Orre map fly-over behind the menu, **likely**). The top menu itself is `titleMenuMain` (0x800210F0), reached through
    the wrapper `fn_80021624` (**likely** from the `topmenu` room's data: nothing in `main.dol` calls it).
-5. **Top menu** (`fn_800210F0`, menu 0xAA, choice in `lbl_8047A360`):
+5. **Top menu** (`titleMenuMain` (0x800210F0), menu 0xAA, choice in `lbl_8047A360`):
    - **New Game** (taken when the menu call itself returns 0, **likely** "the first item chosen") -> a confirmation: with no save, a plain "start a new story?" (message 0x3C3A); when a save exists, a
      warning that it will be deleted (0x3C35, or the same warning in another wording, 0x44C9, when
      `fn_8006A718(0)` is 1: not traced); on "yes": close the menus, start background music 1, **name entry** (name-entry.md; `menuNameEntryOpen(0, 0)`, menu room
@@ -64,20 +64,30 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
      3 takes an index 0-2; mode 0 is the player's name here, **likely**), **create the save** with the entered name (`savedataCreate`), reset play time, sync the
      player's movement work, and `floorLink(0x3A0, 0)`: the **`opening_demo`** room.
    - **What the new save contains** (`savedataCreate`, `hero.c`; **verified**; item names from
-     the US item table): the player record with the entered name (a default name from the executable if none),
+     the US item table): the player record with the entered name (a default name from the executable if none:
+     **"レオ" (Leo, the hero's Japanese name)** in Shift-JIS, `lbl_8047D028`; **verified** from code),
      the two starters (`heroPokemonGetBlacky`, `heroPokemonGetEifie`, byte-matched; move names from the US move
      table): **Umbreon, level 26**, with Bite, Secret Power, Taunt and Snatch, and **Espeon, level 25**, with
      Confusion, Return, Reflect and Helping Hand. Both get **friendship 220**, a personality value rerolled until it
-     fits (`pokemonCreateRndFit(pokemon, sex 0, any nature, shiny 0, player id)`: sex 0 (**likely** male) and **never
-     shiny** for the player's id, **verified** from the reroll loop; the shiny test itself: rng.md, "Shiny checks"), a fixed **EXP total** (status 0x79: Umbreon 19,055, Espeon 16,372, both part of the way into their level), and are added to the
-     party through `heroCatchPokemon` (ball argument 0xFE, **guess**: "no ball"). Both are recorded in the Strategy Memo
-     (pda.md). Then **10,000 money**, and the bag: Potion x5, Super Potion x2, Antidote x2, Burn Heal x2,
+     fits (`pokemonCreateRndFit(pokemon, sex 0, any nature, shiny 0, player id)`: sex 0 is **male** and **never
+     shiny** for the player's id, **verified** from the reroll loop; "male" is now verified too:
+     sex 1 is the branch taken when the species' ratio is above the value's low byte, the Gen 3 female rule, so sex 0
+     is male. How the value is drawn and when it is redrawn: rng.md, "How a personality value is drawn"; the shiny
+     test itself: rng.md, "Shiny checks"), a fixed **EXP total** (status 0x79: Umbreon 19,055, Espeon 16,372, both part of the way into their level), and are added to the
+     party through `heroCatchPokemon` (ball argument 0xFE). Both are recorded in the Strategy Memo
+     (pda.md).
+   - **Random numbers used** (**verified** by a per-call RNG trace and Dolphin's RNG state at the
+     top menu): creating the save takes **1,016 draws** in the usual case, all in one frame: the Strategy Memo's reset
+     gives each of its 500 slots a random 32-bit id (1,000 draws), the player's trainer ID takes 2, and each starter
+     takes 5 in `pokemonCreate` (a first personality value of 2 draws, two IV words, the ability roll) plus 2 per
+     attempt in `pokemonCreateRndFit`, whose value replaces the first one (more attempts when a redraw is needed). The same save creation also runs before the logo and when the title screen leaves for the top menu, so
+     the RNG passes through this burst three times before the opening movie. Then **10,000 money**, and the bag: Potion x5, Super Potion x2, Antidote x2, Burn Heal x2,
      Ice Heal x2, Awakening x2, Parlyz Heal x2, Full Heal x2. The save header's **return point** starts at room 2
      (`S1_shop_1F`, the Outskirt Stand shop), entry 1, with the second room id 1: so a blackout before the first save
      goes to the Outskirt Stand shop (**likely**, if nothing writes the return point earlier).
    - **Continue** -> only if a save exists (save-header field 4, the save count, is not 0; otherwise a message,
      0x44EA or 0x444B, likely the memory-card states): show the player's summary (model, name, play time, ...) with
-     message 0x3C22 and a yes / no; on "yes", `fn_80113FE8` warps to the **return point in the save header**, the same
+     message 0x3C22 and a yes / no; on "yes", `floorReturnToSavedRoom` (0x80113FE8) warps to the **return point in the save header**, the same
      warp the field-poison blackout uses (field-steps.md). So Continue resumes in the room the save recorded.
    - **Battle Mode** -> choices 2 and 3: `menuColosseumBattle(0)` / `(3)`, which store that kind in save section
      14 (`ColosseumSaveWork.battleKind`; section 14 holds Battle Mode state) and change to
@@ -89,28 +99,77 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
      So the top menu's two Battle Mode entries open the menu on **Colosseum Battles** (0) and **Battle Now** (3).
      Section 14 +0x08 is the rule set: 0 anything goes, 1 level 50 cap, 2 level 100 cap, 3-5 the player's three
      edited rules (**verified** from the headers).
-   - **Options** -> choice 4: `fn_80020C9C`, then back to the menu. It edits the **sound output mode**
+     **Where the teams come from** (**verified** by walking the menus in an emulator, with the
+     menu code `menuColosseumBattle.c`):
+     - The top menu shows two panels, **Story Mode** (Continue, New Game) and **Battle Mode** (Colosseum Battle,
+       Battle Now), plus Options and Quit; with no story save the cursor starts on New Game.
+     - **Colosseum Battle** first asks "How many will battle?": **Solo Battle** or **Gang Battle**. Solo Battle's menu
+       has Colosseum Battle, Mt. Battle vs 100, Continue (a saved run), **Register Pokémon** and PokéCoupon Exchange.
+       Colosseum Battle and Mt. Battle refuse until a team is registered ("You may not proceed because you have not
+       registered your Pokémon": message 0x3BFE, shown when no battle-mode player record is saved).
+     - **Register Pokémon** offers two sources: **Colosseum Pokémon**, the party of the Story Mode save on the memory
+       card in Slot A (`heroBiosCopy` from the save's player section; refused with "no Story Mode save data on the
+       Memory Card in Slot A", 0x444D, when there is none), and **GBA Pokémon**, Pokémon from a linked Game Boy
+       Advance game (a four-trainer party picker, `fn_800849B4`).
+     - **Battle Now** needs no save: Single Battle or Double Battle, then the opponent's difficulty (Ultimate, Hard,
+       Normal, Easy), then it offers a **ready-made team** under a trainer name (in the run checked: six level 50
+       Pokémon) with "Would you like to enter with these Pokémon?". Whether "No" offers another team, and how the
+       team is chosen, is not traced.
+     - So a battle with a chosen team needs a Story Mode save (its party) or a GBA game; Battle Now gives fixed or
+       random ready-made teams without one.
+     - **Registration checks the party against the rules right away** (**verified** on screen
+       with two save copies): "One or more POKéMON don't meet the rules", then the reason, then "Please restart the
+       Story Mode and change the party POKéMON to those that are allowed under the rules." Reasons seen: **"There are
+       not six POKéMON in your party!"** (a five-Pokémon party) and **"At least two POKéMON are holding the same kind
+       of item!"** (an item clause). The offending Pokémon (or the empty slot) are marked in red. Two level-100
+       Pokémon in the five-Pokémon party were not marked, so level 100 likely passes registration (**likely**: only the
+       first failing rule may be shown). A six-Pokémon party with three level-100 Pokémon,
+       all holding nothing, **registers** ("Is it okay to register POKéMON?", then "Data has been saved to the Memory
+       Card in Slot A!", "Registration completed!"; **verified**). So level 100 passes, six empty hands don't break
+       the item clause, and moves from a GBA move tutor (Fire Punch, Ice Punch) trip no rule.
+     - **Mt. Battle vs 100 in Battle Mode** (**verified** on screen, one run): Single or Double
+       Battle, then "Would you like to enter with these POKéMON?", then the field: the player starts on Mt. Battle's
+       bridge (room 0x4C) and walks up to the first trainer, who challenges him. The battle runs through room 0x397
+       (`toolbattle_menu`). A vs screen ("MT. BATTLE-VS 100 / Trainer No.: 1", here GLASSES MAN ROOD) comes before a
+       "Please select 3 POKéMON." screen (singles).
+       - **The player's Pokémon keep their own levels** (levels 27, 25, 100, 100, 100 and 1 shown unchanged on the
+         selection screen).
+       - **The opponent's Pokémon were all level 100**, even weak species (Sunkern, Magikarp, Wurmple, Azurill, Ralts,
+         Silcoon). So Mt. Battle likely sets its opponents' level from the player's team (its highest level, or the
+         rule's cap): **likely**, from one trainer.
+       - No continue count was shown before the first battle.
+     - **Colosseum Battle's list** (**verified** on screen, one run): Phenac Stadium, Pyrite
+       Colosseum and The Under Colosseum at Lv50, Tower Colosseum at Lv100, two entries shown as "?????" / "Lv???",
+       Exit and Check rules; the selected colosseum shows its trainer level ("Easy" for Phenac Stadium) and a Single /
+       Double Battle record. Then Single or Double Battle, "Would you like to enter with these POKéMON?", a save, and
+       a vs screen ("PHENAC STADIUM / Battle 1") in room 0x397. A registered team of six level-50 Pokémon with six
+       different held items was accepted at Phenac Stadium.
+       - Every record shows a **"Champ!"** label from the start (Phenac Stadium's Single and Double read "Champ!"
+         even on a save from just after Phenac's first visit); the label **glows and sparkles** once that challenge
+         has been completed (**verified** in play). So the early "Champ!" is the normal look, not a save problem.
+         Where the completion records live is not traced.
+   - **Options** -> choice 4: `titleNewContinueSelect` (0x80020C9C), then back to the menu. It edits the **sound output mode**
      (`GSsndGetOutputMode`, likely mono / stereo / surround) and save-header option 9, **rumble off**
      (`gamedatasaveBios...OptionNoVibration`). Cancelling restores both. On leaving, if the rumble setting changed
-     and `fn_801D04E8` holds (the memory-card task state's `serial_check_enabled` flag; what it means is not
+     and `memcardGetFlag41` (0x801D04E8) holds (the memory-card task state's `serial_check_enabled` flag; what it means is not
      traced), it asks whether to save (message 0x3D82) and
      saves the options with `fn_801D0748(7, 2, 0)`. (Only option 9 is compared there; how the sound mode is stored, as
      save-header option 10 or not at all, is not traced.)
    - Anything else -> back to the title room (0x384).
 
-   **How the top menu's entries are defined** (**verified** from the menu tables in `main.dol` and `fn_800210F0`
+   **How the top menu's entries are defined** (**verified** from the menu tables in `main.dol` and `titleMenuMain` (0x800210F0)
    unless marked). Part data, part code:
    - **Layout is data:** menu 0xAA is a record in the menu table (menus.md (not yet published)), whose item chain holds four
      non-selectable panels (items 0x90E-0x911, each drawing a sprite: the background frames) and **six selectable
-     entries** (items 0x912-0x917: screen position, size and the shared draw callback `fn_80020F54`). An entry's
+     entries** (items 0x912-0x917: screen position, size and the shared draw callback `titleDrawContinueInfo` (0x80020F54)). An entry's
      choice value is its place in that chain (0-5). The items carry no message keys, so the entry labels are not
      text from the message banks (**likely** drawn as part of the sprites; not traced).
-   - **Help line is data:** while the cursor rests on an entry, `fn_80020EA4` shows a one-line description from a
+   - **Help line is data:** while the cursor rests on an entry, `titleDrawOptionHelp` (0x80020EA4) shows a one-line description from a
      table of message ids indexed by the choice (`lbl_802E4ED8`; the Options screen has its own table,
      `lbl_802E4EF0`).
-   - **What each entry launches is code:** a fixed `switch` on the choice in `fn_800210F0`: New Game (the menu call
+   - **What each entry launches is code:** a fixed `switch` on the choice in `titleMenuMain` (0x800210F0): New Game (the menu call
      returns 0) -> the confirmation, name entry, save creation and room 0x3A0; 1 Continue -> the save's return point;
-     2 / 3 -> `menuColosseumBattle(0)` / `(3)` and room 0x395; 4 -> the Options screen (`fn_80020C9C`); any other value
+     2 / 3 -> `menuColosseumBattle(0)` / `(3)` and room 0x395; 4 -> the Options screen (`titleNewContinueSelect` (0x80020C9C)); any other value
      (the sixth entry, or cancel) -> back to the title room 0x384 (**likely** the sixth entry is "back"; its label not
      checked).
    - So a mod can move or restyle entries and change their help text by data, but a new entry, or a new target for an
@@ -134,10 +193,10 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
    | 0x384 `title` | `fn_8002049C` | `fn_800203B4` (the attract-demo check) | `fn_80020328` |
    | 0x39C `auto_demo` | `movieStartAttract` | `fn_80036240` | `fn_80036210` |
    | 0x3A0 `opening_demo` | `movieOpeningStart` | `fn_80035E04` | `fn_80035DD4` |
-   | 0x3A1 `topmenu` | `fn_80021644` | `fn_80021624` | `fn_800215C4` |
+   | 0x3A1 `topmenu` | `titleIntroStart` (0x80021644) | `fn_80021624` | `fn_800215C4` |
 
    So the **tpc movie is played by room 0x399 `pokemon_logo`**, and the top menu's
-   setup is `fn_80021644`. A room's script functions run in the same three phases (step 7).
+   setup is `titleIntroStart` (0x80021644). A room's script functions run in the same three phases (step 7).
 7. **Outskirt Stand** (room 1, `S1_out`; **verified** from the decoded room script on the US
    disc). On entry the script checks story flag **986**: while it is clear (the first arrival) it starts no music
    (`null_bgm_song`); later visits play `stand_song` once flag 2480 is set. The room setup (function 1) only shows or
@@ -177,7 +236,7 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
    **How a room's script functions run** (`floor.c`; the room record's five script slots, room
    table +0x28 to +0x38; for `S1_out` functions 0, 1, 2, 11, 3):
    - +0x28 (function 0, sound setup): started in its **own script thread** as soon as the room's script file has
-     loaded (`fn_80112700` -> `fn_800F7318(priority 0xF, ...)`; **verified**).
+     loaded (`floorStartSoundScript` (0x80112700) -> `_vmThreadCreate(priority 0xF, ...)` (0x800F7318); **verified**).
    - +0x2C (function 1, characters shown or hidden by flags): run **synchronously** during room setup
      (`cmsRunSync`, **verified**).
    - +0x30, +0x34, +0x38 (functions 2, 11, 3): filed in the room task's **three queues** next to the room's C
@@ -238,9 +297,19 @@ to room 2 (`S1_shop_1F`, entry 1), the Outskirt Stand shop: the post-game starts
 | 0x9B0 (2480) | `fightStartEncount`, at every battle start | a battle has been fought; `S1_out` plays `stand_song` once it is set. It is a **per-room** flag (class 1, flags.md (not yet published)), so it means "on this visit": cleared at the next room change (**verified**: flag table and a Dolphin flag read) |
 | 990 | `S1_out` function 9, after a won battle | Willie has been beaten |
 
+## How long each step takes on the console (**verified** in Dolphin from one recorded route)
+
+Frames between room changes (60 per second): logo → title **437**; title → top menu **3,506**; top menu → name entry
+**1,224**; name entry → the opening **1,071**; the opening → Outskirt Stand **3,882**. Several of these include the
+time the route spent before pressing a button, so they are the route's times, not minimums. The PC's field room
+changes land within 2 frames of these.
+
+**Leaving Outskirt Stand for the world map:** the town-boundary exit (pass event 0) at the south edge, at about
+z = 96 (**verified** from a PC log of the exit triggers).
+
 ## Data structures
 - The top menu's choice: `lbl_8047A360` (1 Continue, 2 / 3 Battle Mode, 4 Options, -1 cancel; New Game is the menu
-  call's own return value 0), its state machine in `fn_800210F0`.
+  call's own return value 0), its state machine in `titleMenuMain` (0x800210F0).
 - Room ids: 0x399, 0x39A, 0x384, 0x3A1, 0x3A0, 1, and 0x39C for the attract demo (room table; names from the
   archive table).
 

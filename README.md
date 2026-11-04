@@ -48,6 +48,7 @@ apply to XD too; the game-specific pages (battles, story, scripts) describe Colo
 - [Battle engine: Shadow Pokémon in battle, and the heart gauge](systems/battle-shadow.md)
 - [Battle engine: snagging and catching (the ball throw)](systems/battle-snag.md)
 - [Battle arenas (where every battle takes place)](systems/battle-arenas.md)
+- [Battle camera: who controls it, when, and how it uses random numbers](systems/battle-camera.md)
 - [The Shadow Pokémon system](systems/shadow-system.md)
 - [Evolution: the rules](systems/evolution.md)
 - [Friendship](systems/friendship.md)
@@ -73,6 +74,7 @@ apply to XD too; the game-specific pages (battles, story, scripts) describe Colo
 - [Memory card tasks](systems/memory-card.md)
 - [Save data (in memory)](systems/save-data.md)
 - [The bag, Rui's pocket and the PC](systems/bag-and-pc.md)
+- [Pokémon data: species table and individual records](systems/pokemon-data.md)
 
 ### Colosseum only
 
@@ -99,7 +101,10 @@ Every claim is labelled, so you know how far to rely on it:
 
 - **verified**: checked against the game's code or its behaviour;
 - **likely**: strongly supported, but not checked directly;
-- **guess**: a working theory, could be wrong.
+
+Working theories that haven't been checked yet are left out of these pages; they join a later update once they are
+checked. (The "Applies to" line at the top of each page is the one exception: it may say **guess** about XD, because
+XD hasn't been studied yet.)
 
 ## How these were made
 
@@ -112,6 +117,14 @@ Corrections are welcome: open an issue on this repo.
 No game files, no extracted game data, no disc images and no game code, only descriptions of formats and behaviour,
 plus function and file names from the public decompilations.
 
+## Names and addresses
+
+Function names and addresses are those of the Pokémon Colosseum decompilation,
+[dougchansan/pkmn-colosseum](https://github.com/dougchansan/pkmn-colosseum) (a dtk-template project with a byte-exact
+build of the USA release, GC6E01): any name or address on these pages can be looked up in its
+`config/GC6E01/symbols.txt` and `src/`. Names change as the decompilation improves; the address is the key, so a page
+that still uses an older name points at the right function.
+
 ## Thanks
 
 Built on the work of the Pokémon Colosseum decompilation (dougchansan and contributors), the Super Smash Bros. Melee
@@ -119,9 +132,14 @@ decompilation (the same HSD library), StarsMmd's Colosseum / XD tools and resear
 
 Thanks also to TeamOrre and the XD decompilation community.
 
+## Disclaimer
+
+This is an independent research and documentation project, made for educational purposes. It is not affiliated with, endorsed by or connected to Nintendo, The Pokémon Company, Game Freak, Creatures Inc. or Genius Sonority. Pokémon, Pokémon Colosseum, Pokémon XD and all related names are trademarks of their respective owners, used here only to identify the games being described.
+
+These pages contain no game files, code or extracted data. Everything is described in our own words from studying a legally owned copy of the game. To use any of this, you need your own copy.
+
+The CC0 dedication covers the text of these docs only, not the games or their trademarks.
+
 ## License
 
 [CC0 1.0](LICENSE): public domain dedication.
-
-*An unofficial fan research project, not affiliated with Nintendo, The Pokémon Company, Game Freak or Genius Sonority.
-Pokémon and the game names are trademarks of their owners.*

@@ -6,7 +6,8 @@ Status: **partial** (2026-10-14). Every Colosseum and battle area, which room it
 battles use it. Read from two tables in `common_rel` (game-data-tables.md (not yet published)):
 the **battle-floor table** (`lbl_80478F4C`, 50 entries of 24 bytes, `fightFloorDataBiosGetPtr`)
 and the **battle table** (`lbl_80478F54`, 566 entries of 56 bytes, `fightEncountDataBiosGetPtr`).
-Layout and links are read from the USA data; field names are guesses unless marked.
+Layout and links are read from the USA data; field names are descriptive labels, and what a field does is stated only
+where it is marked.
 
 ## What it does
 
@@ -28,7 +29,7 @@ This also settles what `_bf` means in archive names: the battle-field version of
 | +0x04 | u32 message id | arena **name** (`fightFloorDataBiosGetName`, verified) |
 | +0x08 | u32 **introduction sequence (shōkai) WZX id** | `fightFloorDataBiosGetSyoukaiWzxDataId` (verified). Set only for the Colosseums and arena 6 (0x89-0x8F), i.e. the stages with an intro scene |
 | +0x0C | u32 | **music sound id** for battles on this arena (0 = none; e.g. 24 = `battle2_song`, 981 = `battle6_song`); `fightFloorDataBiosGetBgmSndId`, music.md (not yet published) |
-| +0x10 | u32 **ambient (environment) sound id** | `fightFloorDataBiosGetEnvSndId` (verified). One per Colosseum (0x3D6-0x3DB = crowd sounds, guess) |
+| +0x10 | u32 **ambient (environment) sound id** | `fightFloorDataBiosGetEnvSndId` (verified). One per Colosseum (0x3D6-0x3DB) |
 | +0x14 | 2 x u16 **battle-side data ids** (side 0, side 1) | `fightFloorDataBiosGetFightSideDataId(arena, side)` (verified); always 2 / 1, into the 5-entry battle-side table (`lbl_80478F3C`, 20 bytes each; contents open) |
 
 **Battle entry (56 bytes)** (**verified** from the typed record `FightEncountData` in `fight.c` and its accessors): +0x00
@@ -56,8 +57,7 @@ loaded as the stage. Colosseum battles add the per-Colosseum values (+0x08, +0x1
   44), M4_cylinder_colo (35, 45), M4_bottom_colo (36), D2_crater_colo (Mt. Battle, 37 and 46),
   D4_casino_colo (Realgam Tower, 38 and 47), T1_ancient_colo (48).
 - **Arenas 40-48 have no story battles.** They repeat the Colosseums (and Mt. Battle's three
-  stages) with new name messages, plus T1. Guess: the stages offered by the menu battle modes
-  (Colosseum battle / link battle), which build battles at run time instead of using the table.
+  stages) with new name messages, plus T1.
   This fits T1: a stand-alone Colosseum used only as a selectable stage, which is why it sits in no
   town (`fsys-catalog.md`, T1).
 - **Mt. Battle** (arenas 24-26: valley, magma, cloud) holds 99 battles of type 8, plus 9 others:
@@ -78,7 +78,7 @@ loaded as the stage. Colosseum battles add the per-Colosseum values (+0x08, +0x1
   "Terrain" below (Secret Power, Nature Power, Camouflage; **verified**).
 - **Battle-side records (decoded 2026-10-14 night):** the table (`lbl_80478F3C`, 5 x 20 bytes; common_rel section-4
   offset 0x8F910, count at 0x14A688) holds, per side: +0x00 u16 **Y rotation** (`fightSideDataBiosGetYrot`; 0 or 1
-  in the data: guess, which way the side faces, 1 = turned around), +0x04 / +0x08 the two **trainer status-window**
+  in the data), +0x04 / +0x08 the two **trainer status-window**
   menu ids (`GetFightTrainerStatusMenuDataId`: 243 / 244 or 241 / 242), +0x0C / +0x10 the two **Pokémon status-window**
   menu ids (`GetFightoutPokemonStatusMenuDataId`: 70 / 69 or 71 / 72). Entry 0 is empty; entries 1 / 3 and 2 / 4 are
   identical pairs. So the side records set **facing and the HP / status windows, not positions**: arenas all use
@@ -117,11 +117,37 @@ one (`fightFloorGetStatus(.., 0x0F, ..)` reads it; the AI's Secret Power scoring
 For the Dive Ball rule in battle-snag.md: floor terrain 3, 4 and 5 are the three water terrains, so the Dive Ball
 works on water arenas (**verified** now: the ball reads this same field).
 
+## Flow
+
+A battle starts from its battle record, which names the arena; `fightStartEncount` pushes the arena's room on the room
+stack (below, "Battle rooms"), the battle grid places the trainers and Pokémon ("Who stands where"), and the battle
+music and terrain are read from the arena when the battle sets up. When the battle ends the room is popped and the
+field room comes back.
+
+## Disc data
+
+- **The arena table** (the battle-floor table) is in `common_rel` (game-data-tables.md (not yet published)).
+- **Each arena's room** is its own small room archive: the `_bf` copy of a map, or a Colosseum's `_colo` room, each
+  with its `fight_common_scd` script.
+
+## Efficiency
+
+**Likely** by design: a map battle loads a separate, small battle copy of the room rather than fighting in the full
+field room, so a battle only holds what the battle needs. Not measured.
+
 ## Changing it
 
 - A new stage: add a battle-floor entry pointing at a room id that has a `_bf` (or `_colo`)
   archive, then point battles at its index. Append, so existing indices stay valid.
 - Moving a battle to another arena is a one-field change (+0x04 in the battle entry).
+
+### Mod surface
+- **Data it reads:** battle-floor entries (room id, archive), each battle's arena index (+0x04), the arena's room
+  archive (`_bf` / `_colo`: model, lights, cameras, music lookup).
+- **Hooks it would need:** none to move battles or add stages (appended entries); standing positions and camera sets
+  per arena for new stages.
+- **Fixed-size limits:** the battle-floor table's count.
+- **Must stay vanilla in GameCube-accurate mode:** every battle's arena and each arena's setup.
 
 ## Battle rooms (**verified**)
 An arena record's room id (+0x02) names the room the battle is fought in, and `fightStartEncount` **pushes that room
@@ -141,8 +167,19 @@ copy per room: map-object animations and door / elevator controls).
 - **The idle camera**: while the battle waits for commands, `battle_main` calls `battleCameraStartRandom` every frame;
   about every 200 frames it picks a random grid member (never the same one twice in a row) and starts a camera move
   on it (`fn_801D2C74`): a close-up of one Pokémon, then the trainer behind it, then another Pokémon with its trainer.
+  The 200 counts **screen refreshes**, not game frames (about 3.3 seconds), and
+  half the expiries skip the pick; the full camera system, with its random draws, is [battle-camera.md](battle-camera.md).
 - **Moves**: each move's effect-type function (`fight_waza.c`) loads and plays the move animation's halves in order,
   and the camera cuts to the target for the damage half (wzx.md for the animation files).
+- **How a move camera picks its shot** (**verified** from the code, `wazaSequenceCameraGetPattern`,
+  and the two tables in the game's data): there are two lists of camera shots, one of 8 and one of 13 (a flag argument
+  picks the list; which moves use which is open). Each shot is a 0x4C-byte
+  record: a **weight** first, then the shot's settings (motion kinds as integers, and ranges for the rotation around the
+  subject, the height and the distance, plus timing). The game draws one random number between 0 and 1 and walks the
+  list adding up the weights; the shot where the running total passes the number is used, so a shot with weight 0.2 is
+  picked about one time in five. Three flag bits force particular shots instead.
+  The camera code then draws more random numbers to place the camera inside the shot's ranges, so the same move never
+  looks exactly the same twice, and all of it comes from the shared random-number generator (rng.md).
 
 ## Open questions
 

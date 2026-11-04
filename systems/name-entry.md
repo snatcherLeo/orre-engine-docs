@@ -65,6 +65,35 @@ The lengths are in characters. (Mode 1's script call is the only `menuNameEntryO
    (the partner's name); mode 2 sets the Pokémon's nickname; mode 3 renames the PC box. The result says whether it
    changed, then the room fades out and pops.
 
+### Frame by frame (**verified** against the console on the New Game screen)
+- The room's script makes one native call, `menuNameEntry` (script native 23); the whole screen runs inside it,
+  so the script itself executes nothing while the player chooses.
+- **The background particles** (`menuNameEntryBackCtrl`, a menu tick callback inside `menuDaemon`): on the screen's
+  first frame they run 600 spawn-and-age steps at once (so the screen opens already full), then one step per frame.
+  Each step draws the shared random generator once to decide whether to spawn, and four more times when it spawns
+  (position, size, lifetime). So **every frame the screen stays open moves the shared random numbers**, which is why
+  the New Game burst that rolls the starters' stats depends on exactly when the player confirms the name.
+- **The way out:** after "Is <name> OK?" is answered, the list window closes (`menuCloseSync` waits until it is gone),
+  then a 0.5 s fade to black (`fadeSet(3, 0.5)` and `fadeCheck(1)`), then the model and the screen are torn down.
+- **`fadeCheck(1)` waits one frame more than the fade:** the fade advances in `menuDaemon` (the frame task with
+  priority 0xFE), after the scripts and menus that wait on it (task 0x0A); the waiting thread sees the fade finished
+  only the next frame and then yields once more. So the screen tears down two frames after the fade's last step,
+  and the particles step during both.
+- **Frame pacing on the console** (**verified** from Dolphin's per-frame capture and the game's
+  frame-rate setter): the game asks for 60 frames a second the whole time the screen is open, but the console needs two
+  refreshes to draw it, so the screen (and its particles) runs at 30 a second; when the fade to black starts the frames
+  get light enough for one refresh each, so the fade and the particles' last steps run at 60. Anything that counts
+  frames here therefore counts at 30, then 60, and a replay must copy both stretches to keep the particles' random
+  draws in step.
+- **After the screen's second use in the opening** (right after the battle with Folly; **likely** the partner's name;
+  timings **verified** from the console capture): the black screen after the fade lasts about two seconds. The
+  game reads a ~0.65 MB archive in about 19 frames, then has three long frames (4, 3 and 6 refreshes, **likely** its
+  unpacking and setup), and the following cutscene runs at 30 frames a second.
+- Per-frame task order (`GSgappCreate` priorities, ascending; **verified** from code): 0x00 and 0x01 (system), 0x0A
+  `mainLogicTask` (the game threads: scripts and menus), 0x13 the disc error task, 0x7F the field, 0xFC a disc task,
+  0xFD, 0xFE `mainRetraceLogic` (`menuDaemon` with the window animations, menu ticks and `fadeDaemon`), 0xFF drawing
+  and the reset check.
+
 ## Disc data
 The titles, presets, page grids and button labels are messages in the game text (the menu's own text bank); the
 models come from the room's archive (`name_entry_menu`). The PC box screen has its own copy of the room
@@ -82,6 +111,7 @@ number **is** the control code.
 
 | Who | How the text names them | Where the name lives | Notes |
 |---|---|---|---|
+| *Names in memory and in the save* (**verified** from data) | | names are **UTF-16 code units, big-endian** ("WES" = 00 57 00 45 00 53) in the player record and in each Pokémon's original-trainer name; the trainer-name setter and getter (`pokemonBiosSet/GetCatchTrainerNamePtr`) copy up to 11 units | |
 | **Player (Wes)** | code **0x2B** (`msgctrlHero`), about 325 uses | the player save record's name field (0x2C bytes = 22 UTF-16 units; name entry allows 7) | read straight from the save every time: renaming the save renames every line |
 | **Partner (Rui)** | code **0x2C** (`msgctrlHizuki`), about 230 uses (speaker labels included) | the player save record's partner-name field (0x56 bytes; entry allows 7) | same, from the save |
 | "WES" / "RUI" literally | only as the **preset names** in the name-entry screen's text | message bank of the name-entry menu | no dialogue line spells either name out (**verified**, a search of all US text) |
@@ -123,8 +153,7 @@ number **is** the control code.
 ## Region notes
 - The R key's code is the **Japanese voiced-mark swap** (`exchangeDakuon`, two pair lists). The US build keeps the
   code and changes the data: the first pair list is left empty and the second holds upper / lower case pairs, so
-  the same key becomes the case toggle. The Japanese build **likely** fills both lists with kana and their voiced /
-  semi-voiced forms (guess until the Japanese data is read).
+  the same key becomes the case toggle. What the Japanese build puts in both lists is not read yet.
 - The page grids and the maximum lengths (7 / 7 / 10 / 8) are region data; Japanese names are **likely** shorter.
 
 ## Open questions

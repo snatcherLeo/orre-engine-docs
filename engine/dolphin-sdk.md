@@ -42,6 +42,15 @@ A PC port can replace whole SDK families behind the same function names (*likely
 GameCube ports do). CARD -> save files on disk; DVD -> reads from the player's disc image; OS reset ->
 restart the main loop.
 
+### Mod surface
+- **Data it reads:** the disc (DVD), the memory card (CARD), controller input (PAD), the system clock (OS).
+- **Hooks it would need:** none for mods directly; mods reach these through the game's own systems. The port
+  replaces whole families (CARD, DVD, PAD, GX) behind the same names.
+- **Fixed-size limits:** the console's (memory card block sizes, four controller ports, the video modes).
+- **Must stay vanilla in GameCube-accurate mode:** the behaviour the game can observe (load timing where it is
+  simulated, card results, how often the controller is read per frame: often twice, from Dolphin movie traces,
+  **likely**).
+
 ## Efficiency
 
 Fixed static control blocks (no allocation); all waits are bounded by timeouts measured with

@@ -27,7 +27,7 @@ and pulls back smoothly as they move through the room, without any camera path b
 
 ## Flow
 
-1. **Room entry** (`fn_80117164`): the room's point list is loaded and the field camera is **enabled**.
+1. **Room entry** (`fieldCameraLoadList` (0x80117164)): the room's point list is loaded and the field camera is **enabled**.
 2. **Every frame** (`fn_801171C8`, from the floor update), in normal scene mode only:
    - **one point**: its three values are used directly (a fixed framing for the whole room);
    - **several points**: each point is weighted by **1 / (squared distance from the camera's target to the
@@ -61,6 +61,14 @@ sky isn't drawn, so the authored camera also sets **how far the camera sees**.
 - **Known quirk** (**likely**, from the code): the yaw is averaged as a plain number, so two anchors whose yaws lie
   on either side of the ±180° wrap would blend through the opposite direction. Rooms presumably avoid that by
   their placement.
+
+### Mod surface
+- **Data it reads:** each room's camera anchors (position, distance, height, yaw) and its default camera.
+- **Hooks it would need:** a player offset after the blend (a free camera), anchor editing for custom maps, and the
+  cutscene take-over and hand-back (for camera mods in scenes).
+- **Fixed-size limits:** the anchor list per room (from the room module).
+- **Must stay vanilla in GameCube-accurate mode:** the anchors, the blend (including its yaw quirk) and the cutscene
+  take-over.
 
 ## Efficiency
 - No camera paths, collision tests or look-ahead: a handful of weighted averages per frame (a room has at most a

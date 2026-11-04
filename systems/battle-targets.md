@@ -51,7 +51,7 @@ floor status fields that the engine updates as it goes; that is how one script c
 target" without knowing who they are.
 
 ### Move target ranges (move record +0x03, `RangeId`)
-Read by `fn_8022B2CC` (pick a move's target) and the accuracy check; the meanings are **verified** from the code's
+Read by `fightSeqSelectTarget` (0x8022B2CC) (pick a move's target) and the accuracy check; the meanings are **verified** from the code's
 handling plus the moves on the disc that use each value:
 
 | Value | Targets | Example moves (US disc) | Code |
@@ -97,6 +97,12 @@ The target table is static data in the executable (`.data`, 0x80375AC8).
 
 More Pokémon per side (a "triple battle" mod) would need new relative ids and buffer indices, and every
 fixed-size array the buffers index (8 field slots, 2 per side) to grow; the table count bounds every scan.
+
+### Mod surface
+- **Data it reads:** the relative-target table (each id's meaning and buffer index).
+- **Hooks it would need:** new relative ids for new battle formats; none for ordinary moves.
+- **Fixed-size limits:** 8 field slots, 2 Pokémon per side.
+- **Must stay vanilla in GameCube-accurate mode:** the table and how each move picks its targets.
 
 ## Efficiency
 

@@ -27,14 +27,14 @@ times hang off the species' **animation time points** (PKX slot records), the sa
 3. the **entries**, each a node header followed by a payload. Every file ends exactly where its last entry ends
    (checked on all 1,098).
 
-**Node header** (`fn_801DC46C`, 0x70 bytes, or 0x6C when +0x68 = 1):
+**Node header** (`wazaSequenceLoadEntryParams` (0x801DC46C), 0x70 bytes, or 0x6C when +0x68 = 1):
 
 | Offset | Field |
 |---|---|
 | 0x00 | key (other entries link to it) |
 | 0x04 | entry type (below) |
-| 0x08 | attachment (*guess:* which model / joint the entry follows) |
-| 0x0C | position type (*guess*) |
+| 0x08 | not identified yet |
+| 0x0C | not identified yet |
 | 0x10 | link key: start relative to that earlier entry (0 = relative to the owner's time point) |
 | 0x14 | own index: which of its own timing values to subtract from the start |
 | 0x18 | base index: which timing value of the linked entry, or which owner time point, to start from |
@@ -66,7 +66,7 @@ point[base index]), minus the entry's own timing[own index]. After loading, all 
 | 0 | colour fade (*verified at runtime*: colour keys interpolated over time, tinting the battle room's models) | flags, count, mode, (flags word unless mode 1 / 2), then count x {RGBA from, RGBA to, s32 frames, pad} |
 | 1 | electron (*verified*, start function name) | 4 vectors, 3 floats, 2 ints, colour, int; GStexture at the next 32-byte boundary after 0x54 |
 | 2 | arcs between two joints (*likely*, effects.md) | colour, floats and ints, 0x1C bytes |
-| 3 | lightning (*guess*) | 2 colours, int, 2 vectors, 9 floats, int; texture after 0x54 |
+| 3 | not identified yet | 2 colours, int, 2 vectors, 9 floats, int; texture after 0x54 |
 | 4 | trail (*verified*, tracefx) | colour, 3 ints; texture after 0x18 |
 | 5 | leaf (*verified*) | 10 floats, 3 ints; model archive after 0x3C |
 | 6 | sea: water surface (*likely*) | floats, colour, grid size, floats, mode; model archive after 0x40 / 0x44 |
@@ -74,7 +74,7 @@ point[base index]), minus the entry's own timing[own index]. After loading, all 
 | 8 | env-map shine (*likely*) | 2 ints, count, mode; mode 2: count x {f32, f32, s32 frames, pad} |
 | 9 | blur / after-images (*likely*) | count, mode (3 adds a value); count x {f32, f32, s32 frames, pad} |
 | 10 | aura (*likely*) | colour, five switches, 3 floats, 0x28 bytes |
-| 11 | billboard (`patchiru`, *likely*; the Spinda link a *guess*) | model archive size, ints; optional model after 0x18 |
+| 11 | billboard (`patchiru`, *likely*) | model archive size, ints; optional model after 0x18 |
 | 12 | distortion (*likely*) | ints, floats, mode; texture after 0x18 / 0x1C |
 
 Kinds 8 and 9 with mode 1 leave the game's cursor unset (an original bug: the next entry would be read from garbage);
@@ -103,6 +103,34 @@ are), which is why every file ends exactly at its last entry.
 3. While the sequence runs, entries start at their times: particles through `gsParticleCreate`, models through the
    model system, screen effects through the effect modules (`effect_visual.c`, `tracefx.c`), sounds through the sound
    system.
+
+## Poké Ball sequences: how the balls and their effects are built
+
+(**verified** from the files unless marked; Poké Ball checked in full, the other balls by their
+matching sizes and structure):
+- **Each ball type has its own set of sequences:** `<ball>_out` (send-out), `_in` (return), `_open`, `_downin`
+  (drop-in), and for snags `snatch_attack_<ball>` (the Snag Ball throw, played on the trainer's animation slot 7),
+  `snatch_shake_<ball>`, `snatch_miss_<ball>`, `snatch_ball_land_<ball>`, plus shared `snatch_poke`, `snatch_shake`
+  and `snatch_snatch` (the success). The ball table points each ball at its sequences
+  (game-data-tables.md (not yet published)).
+- **The ball itself is one rigid model with one joint:** for the Poké Ball, 120 triangles about 0.9 units across, one
+  64x128 texture. **It has no separate lid or button parts**, so the original never opens a lid; the opening is shown
+  by the light effects around it (**likely** from the parts list; to confirm by watching).
+- **It is the same file everywhere:** the ball embedded in `monsterball_open`, `snatch_attack_monster`,
+  `snatch_shake_monster` and the others is **byte-identical** to the field model `ball_monster` that the Pokémon
+  Centers place on the healing machine. Each ball type has its own copy (the twelve field models: pokemon-data.md,
+  "Items as 3D models"; **likely** one-to-one with the sequences).
+- **The movement comes from separate animation-only parts:** small embedded models with no geometry and one animation
+  (15 to 110 frames: the throw arc, the shakes, the landing), which the ball and effects hang from through the entries'
+  attach settings (**likely** from the structure; the attach semantics are partly open, above).
+- **The flash and light around the ball are their own models:** the send-out's largest part (about 120 KB for the Poké
+  Ball, 18 joints, 17 meshes) is all **semi-transparent effect geometry** (flat rings and light shapes, six 128x128
+  textures), not the ball. The Master, Great and Net Balls' versions carry a few more parts (19-21 joints). The snag
+  throw has its own effect models (about 60 KB and 250 KB), and each send-out has a **particle bank** (about 200 KB for
+  the Poké Ball) and a **sound**.
+- **For replacement:** a new ball model must be one joint and one mesh at the original's size and origin, so every
+  sequence that embeds it lines up. A ball with moving parts (a lid that opens) would be a **new behaviour**, not a swap:
+  the sequences have no slot that moves a lid.
 
 ## Disc data and tools
 

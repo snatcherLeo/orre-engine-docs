@@ -187,7 +187,7 @@ matrix (or its inverse transpose) depending on the joint's lighting and texgen n
   its own id elsewhere).
 - **`HSD_CObj`** (verified layout): flags, viewport and scissor rectangles, eye and interest `WObj`s, roll or an up
   vector, near / far, and a projection that is perspective (fov, aspect), frustum or orthographic (top, bottom,
-  left, right). The function that applies the viewport is replaceable; GSgfx installs its own (`fn_800D3EC4`,
+  left, right). The function that applies the viewport is replaceable; GSgfx installs its own (`GSgfxSetViewportJitter` (0x800D3EC4),
   gfx.md).
   Camera flags (verified from `cobj.c`, 2026-10-15): bit 0 the camera uses an up vector instead of a roll angle
   (the description's up vector, or (0, 1, 0) if it has none); bit 1 the viewing matrix is never rebuilt from eye /
@@ -236,7 +236,7 @@ and map archives rely on that: a reader that follows an instance joint's child c
 the ones checked are perspective cameras with a 640 x 480 viewport), +8 the light list, +0xC a list whose first entry
 is the fog description (set in 637 map archives). The map loader (`floorReadMapPostFunc`) registers each
 part as a resource of the map: models, lights (loaded through `GSlightLoad`), the camera (turned into a game camera by
-`fn_800D27FC`) and the fog. Entering the map makes the camera active (`cameraSetGScamera`) and hands the fog
+`GScameraCreateFromDesc` (0x800D27FC)) and the fog. Entering the map makes the camera active (`cameraSetGScamera`) and hands the fog
 description to `gfxSetFog`, which loads it into HSD and also uses its colour as the screen clear colour (gfx.md).
 
 **Model sets and their animations (verified from data, 2026-10-15).** `scene_data` +0 is a null-terminated list of
@@ -256,7 +256,7 @@ models carry between 4 and 16 joint animations (8 is the most common). Which slo
 - Value and slope encodings (`frac_value`, `frac_slope`): bits 5-7 the storage type (32-bit float, s16, u16, s8, u8),
   bits 0-4 the number of fraction bits, so a stored integer n means n / 2^bits. Small encodings make animation data
   compact; a modding tool must pick an encoding whose range fits the values.
-- Splines are cubic Hermite curves between two keys with their slopes (`fn_801B2560`, likely Hermite from its
+- Splines are cubic Hermite curves between two keys with their slopes (`splGetHelmite` (0x801B2560), likely Hermite from its
   parameters: 1 / frame count, time, both values, both slopes).
 
 **One root per archive: `scene_data` (verified by a read-only scan of all 1,277 HSD archives on the disc: maps,
@@ -276,7 +276,7 @@ materials, found no class name; each model set starts with its joint tree).
 
 ## Flow
 
-**Start-up (verified, `initialize.c`).** The game sets parameters with `HSD_SetInitParameter` (`fn_8019C3C4`):
+**Start-up (verified, `initialize.c`).** The game sets parameters with `HSD_SetInitParameter` (0x8019C3C4):
 GSgfxInit asks for 2 XFBs (double buffering) and its render mode. `HSD_InitComponent` then: DVD init, XFBs and the
 GX FIFO from the arena (newer library: `OSAllocFromArenaLo`), heap and memory callbacks (`HSD_OSInit`: either the
 game's own allocator callbacks or HSD's default, an OS heap over the arena), `HSD_VIInit` (black screen, clear colour
@@ -290,14 +290,14 @@ same way from its own description.
 **Each frame.** Animation (`HSD_AObjInterpretAnim` per AObj: advance by the rate, loop with `fmod` or stop, push
 values through the FObj tracks; `HSD_ForeachAnim` applies one operation to every AObj of a tree), then matrices are
 rebuilt lazily (only joints with `JOBJ_MTX_DIRTY`, when something reads or draws them), then display:
-`HSD_StartRender(pass)` (`fn_8019C708`: sets the pixel / Z format for the render mode, applies pending vertex-cache /
+`HSD_StartRender(pass)` (0x8019C708: sets the pixel / Z format for the render mode, applies pending vertex-cache /
 texture invalidations) -> camera setup (`HSD_CObj`, its viewport function is replaceable: GSgfx installs
-`fn_800D3EC4`, see gfx.md) -> joint display.
+`GSgfxSetViewportJitter` (0x800D3EC4), see gfx.md) -> joint display.
 
 **Render passes (verified, `HSD_JObjDispDObj` = `fn_80197784`).** A joint's mesh is drawn in up to three passes,
 opaque, texture-edge (alpha-tested) and translucent, selected by joint flags 0x40000 / 0x100000 / 0x80000
 (`trsp_mask << 18`); texture-edge and translucent meshes are queued in z-lists and drawn sorted afterwards
-(`fn_801974A8`). Per mesh: `MObj` setup (render mode, colours, textures, the TEV stages its `TExp` compiled to) then
+(`_HSD_ZListDisp` (0x801974A8)). Per mesh: `MObj` setup (render mode, colours, textures, the TEV stages its `TExp` compiled to) then
 `PObj` display (load the vertex descriptor and matrices: rigid, envelope-skinned or shape-blended, then call the
 display list). Colosseum's library skips meshes whose PObj has flag 0x800 (hidden), Melee's doesn't.
 
@@ -322,8 +322,7 @@ animation of this model" in one call.
 
 `HSD_AObjInterpretAnim` advances one AObj by its frame rate, loops it (`fmod` into
 [rewind, end)) or stops it at the end, then pushes the new values to the object through the FObj
-tracks. Two counters (`lbl_8047B38C` / `lbl_8047B390`) count running vs stopped animations per frame
-(guess: debug statistics).
+tracks. Two counters (`lbl_8047B38C` / `lbl_8047B390`) count running vs stopped animations per frame.
 
 ### Colosseum's HSD vs Melee's (found while matching, 2026-10-14)
 
@@ -423,6 +422,14 @@ pointer is a 32-bit offset until `Locate` turns it into a 32-bit address.
 - Subclassing: the class-name lookup in the loaders is the natural mod hook (a mod can register a class and name it
   in a description).
 - `HSD_SaveContext` (crash-dump register snapshot) and other assembly come from the port's platform layer in the PC port.
+
+### Mod surface
+- **Data it reads:** archive descriptions (joints, meshes, materials, textures, animations, lights, cameras, fog) from
+  every HSD file.
+- **Hooks it would need:** the class-name lookup in the loaders (a mod registers a class and names it in a
+  description), and loaders for new or higher-detail models through the same descriptions.
+- **Fixed-size limits:** the library's object pools and each description format's field widths.
+- **Must stay vanilla in GameCube-accurate mode:** how every description is loaded, animated and drawn.
 
 ## Efficiency
 
