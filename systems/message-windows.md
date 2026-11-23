@@ -35,7 +35,7 @@ Types 0 and 3 share menu 0x40, which opens with a different animation (window se
 
 ### State
 - `gWinMsgCurrentType` (`lbl_80478B30`, s8): the open type, -1 when none.
-- `gWinMsgErrorOpen` (`lbl_8047AD10`, u8): the error window is up.
+- `gWinMsgErrorOpen` (`_winMsgOpenErrWin`, u8): the error window is up.
 - Per window (its free work area): the message handle, two parameters, the keys pressed (`winMsgButton`), and for
   type 4 the message's width and height.
 
@@ -102,7 +102,7 @@ directly), the repeat bits move the cursor (all **verified** from the handler; t
 
 ### How a text box prints and ends (**verified** from `gs_msg.c`, `msgctrl.c` and frame-by-frame logs of the same scene on a GameCube emulator and a native build)
 - **Printing:** each game frame the box's task reads codes from the message text, **one printable character per
-  retrace the frame lasted** (the loop runs `GSgetFrameStep` times), so a scene running at 30 fps prints two
+  retrace the frame lasted** (the loop runs `GSgetFrameStep()` times), so a scene running at 30 fps prints two
   characters per game frame and the reading speed in real time stays the same. A control code (`0xFFFF` then one
   byte) runs a handler from the control table (`msgctrlcode`, 95 entries) instead of printing.
 - **The box's end is a key wait:** most boxes end with control **0x02, `msgctrlKeyEnd`**. On a frame where the

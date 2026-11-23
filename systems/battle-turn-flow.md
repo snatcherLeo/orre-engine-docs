@@ -19,9 +19,9 @@ Colosseum adds one action kind (**Call**) and slots it into the ordering.
 
 ## Data structures
 
-### Action kinds (`lbl_80375BB8`, 20 rows of 12 bytes; **verified** from the executable's data)
+### Action kinds (`fight_action_kind_data`, 20 rows of 12 bytes; **verified** from the executable's data)
 Each row: a signed priority byte, padding, a *flow* function (does the work) and a *disp* function (draws it). The
-count (20) is in `lbl_80478D48`. Rows with priority -1 (0xFF) are phases of the battle, not choices a trainer makes;
+count (20) is in `fight_action_kind_data_number`. Rows with priority -1 (0xFF) are phases of the battle, not choices a trainer makes;
 the five rows a trainer can choose carry real priorities:
 
 | Kind | Action | Priority (lower acts first) |
@@ -170,7 +170,21 @@ Each Pokémon on the field has three records, read through `pokemonGetStatus` se
   a second id (the source or stored value the condition needs), +0x04 s8 **turns left** (set from the condition's
   length table when written), +0x05 u8, +0x06 u8 **stack count** (conditions that stack, like bad poison's counter,
   capped by the condition's maximum), +0x08 u32 value, +0x0C u16. Which slot a condition uses comes from the
-  condition's definition (`joutaiDataBiosGetSlot`), not from its id (**verified** from `statusWriteJoutaiDataId`).
+  condition's definition (`joutaiDataBiosGetUseBanme`), not from its id (**verified** from `joutaiWriteJoutaiDataId`).
+  The developers' own field names, from the accessors' original names (`joutaiBios...`,
+  **verified**: the same accessors in the same order, field for field, appear in XD's `joutaiBios.o`, whose names
+  the XD demo disc's linker map gives): +0x00 `JoutaiDataId` (the condition id), +0x02 `UserFightTargetId` (a
+  battler the condition is tied to; which one is **likely** per condition), +0x04 `Kaisuu` (count: the turns it
+  lasts), +0x05 `NowKaisuu` (the current count), +0x06 `Count` (the stack count), +0x08 `Buff` (a stored value) and
+  +0x0C `IdBuff` (an id stored with it). 
+  The battle never touches a slot directly; it goes through the condition API, whose original
+  names come from XD's `joutai.o` (**likely**, strong: the same 17 functions in the same order, each calling the same
+  slot accessor as its XD twin). Each takes the object (Pokémon, side or field) and a condition id, finds the slot
+  from the condition's definition, and then: `joutaiWriteJoutaiDataId` sets the condition, `joutaiCheckWriteJoutaiDataId`
+  says whether it can be set, `joutaiIsJoutaiDataId` says whether it is there, `joutaiInitJoutaiDataId` clears it,
+  `joutaiInitAry` clears a list of slots, `joutaiCopy` copies a slot from one object to another, and a Set / Get pair
+  per field reads or writes it (`joutaiSetBuff` / `joutaiGetBuff`, `...IdBuff`, `...KaisuuJoutaiDataId`,
+  `...NowKaisuuJoutaiDataId`, `...CountAsJoutaiDataId`, `joutaiGetUserFightTargetId`).
 - **Stat stages are stored with 6 as neutral** (range 0-12 for -6..+6; **verified** neutral: every battler reads 6 at
   the start of a battle; the range is **likely**, Gen 3's).
 - **The move a Pokémon uses** is read from its move slot when the move starts (the "use a move" action re-reads it,
@@ -250,20 +264,25 @@ check (**verified** order from the code; ids as in the table).
 
 ### Condition definitions and lengths (**verified** from code and the executable's data)
 Every condition id has a 20-byte **definition** (`lbl_8035BBA8`, 86 entries, count `lbl_80478B48`; accessors
-`joutaiDataBiosGetKaisuuId` (0x80119D90)-`joutaiDataBiosGetObjectKind` (0x80119F10)), and setting a condition (`statusWriteJoutaiDataId` (0x8011B2C0)) reads it:
+`joutaiDataBiosGetKaisuuDataId` (0x80119D90)-`joutaiDataBiosGetName` (0x80119F50); the +0x00 getter is
+`joutaiDataBiosGetObjectKind`), and setting a condition (`joutaiWriteJoutaiDataId` (0x8011B2C0)) reads it:
 
-| Offset | Meaning |
-|---|---|
-| +0x00 | object kind it belongs to, in the status system's numbering (5 Pokémon, 8 side, 7 battle floor) |
-| +0x01 | slot within that object (e.g. the side conditions Reflect, Light Screen, Safeguard, Mist use slots 0, 1, 3, 4) |
-| +0x02 | kind: 4 = stacking (each set adds 1 up to the limit) |
-| +0x03 | stack limit (bad poison's counter: 15) |
-| +0x04 | **length id** into the count table below (0 = no countdown) |
-| +0x08 | u16 owner kind: 0x7C the major statuses (**likely** the ones kept on the Pokémon after battle), 0xD8 battle-only Pokémon conditions, 0xC8 Hyper Mode, 6 side, 9 field |
-| +0x0A | u16 a linked condition (permanent sun 0x4F links to timed sun 0x53) |
-| +0x12 | u16 name message (sleep, poison, burn, paralysis, ice, confusion for ids 8, 3 / 4, 6, 5, 7, 9) |
+| Offset | Original field name | Meaning |
+|---|---|---|
+| +0x00 | `StatusKind` | object kind it belongs to, in the status system's numbering (5 Pokémon, 8 side, 7 battle floor) |
+| +0x01 | `UseBanme` | slot within that object (e.g. the side conditions Reflect, Light Screen, Safeguard, Mist use slots 0, 1, 3, 4) |
+| +0x02 | `WriteMode` | kind: 4 = stacking (each set adds 1 up to the limit) |
+| +0x03 | `MaxCount` | stack limit (bad poison's counter: 15) |
+| +0x04 | `KaisuuDataId` | **length id** into the count table below (0 = no countdown) |
+| +0x08 | `Status` | u16 owner kind: 0x7C the major statuses (**likely** the ones kept on the Pokémon after battle), 0xD8 battle-only Pokémon conditions, 0xC8 Hyper Mode, 6 side, 9 field |
+| +0x0A | `SameJoutai` | u16 a linked condition (permanent sun 0x4F links to timed sun 0x53) |
+| +0x10 | `Name` | the name message, read as a u32 (its low half is the message id: sleep, poison, burn, paralysis, ice, confusion for ids 8, 3 / 4, 6, 5, 7, 9) |
 
-**Count table** (`kaisuuGetKaisuu`, `lbl_80315690`, 10 entries of {min, max}; the length is random in that range):
+The field names are the developers' own (**likely**, strong): XD's demo linker map lists the
+same eight getters in the same order (`joutaiDataBiosGet` + the name), and XD's code reads exactly these offsets in
+that order, field for field. "Banme" is "number (in a sequence)", "kaisuu" is "count", "joutai" is "condition".
+
+**Count table** (`kaisuuGetKaisuu`, `kaisuu_data`, 10 entries of {min, max}; the length is random in that range):
 0 no limit, 1 = 0, 2 = 1, 3 = 2, 4 = 3, 5 = 5, 6 = 2-3, 7 = 2-5, 8 = 3-5, 9 = 3-6 turns. So, from the
 definitions: **sleep 2-5, confusion 2-5, Disable 3-5, Encore 3-6, Taunt 2, Bide 2, Perish Song 3, Reflect / Light
 Screen / Safeguard / Mist 5, timed weather 5**; the major statuses and Hyper Mode have no countdown. (Gen 3's Disable
@@ -324,7 +343,7 @@ The sort is a simple exchange sort (fine for 8 entries): empty slots go to the e
    - **move priority** (the move record's signed byte at +4, `wazaGetStatus(0, move, 4, 0)`): higher first. Only
      compared when at least one of the two moves has a non-zero priority;
    - **effective Speed** (below): higher first;
-   - **tie: a coin flip** (`GSrand & 1`).
+   - **tie: a coin flip** (`GSrand() & 1`).
 
 The sort can also run with priorities off (`usePri = 0`): then only Speed counts. The battle start (`KaisiPost`, for
 the on-entry ability and item checks) and the end of turn use that form, so **entry effects and end-of-turn effects
@@ -348,7 +367,7 @@ Every trainer on the field chooses in turn (`fightTrainerSelectFightAction`):
 | 3 | **the same button is Run or Call**: Run (action kind 8) if the battle kind allows running (status 0x22), else Call (kind 0x0A) if it allows calling (status 0x21), else nothing |
 
 Choosing can be undone: going back from the second Pokémon returns to the first one's menu (the loop steps back a
-trainer or side). A debug switch (`dbgMenuFightGetAllManual` (0x80008174), off at boot) makes **every** trainer, AI ones included, use the
+trainer or side). A debug switch (`dbgMenuFightGetAllFightTrainerOperateFlag` (0x80008174), the original name, from XD; off at boot) makes **every** trainer, AI ones included, use the
 player's menu: the developers could play both sides.
 
 ### 2. Effective Speed (`fightOutPokemonGetNowNimbleness`; **verified** from code, ids are Gen 3's)
@@ -449,7 +468,7 @@ shadowed (`fn_8011FC74`).
   level (seven bytes, one per level, `pokemonGetHyperModeRate` (0x8011F6D8)). Then the Hyper Mode condition is set with message 0x771B and the
   move goes on. In the US data these chances run from 5 to 70 and natures fall into six patterns (values not listed
   here: disc data).
-- **Leaving by itself (mode 2):** while in Hyper Mode, each check has a **1 in 256** chance (`GSrand % 256 == 0`)
+- **Leaving by itself (mode 2):** while in Hyper Mode, each check has a **1 in 256** chance (`GSrand() % 256 == 0`)
   to calm down on its own: Hyper Mode, sleep and Nightmare are cleared, message 0x771E.
 - So the only reliable way out is **Call**, which always works in Colosseum (above).
 - **Mode 1** is the last step of every Pokémon's end-of-turn pass (`_fightSeqTurnEndJoutaiSub` (0x80230568)): the "is in Hyper Mode" reminder
@@ -577,10 +596,10 @@ partially matched function in `fight_range_80211A00.c`)
   it is already raining. The scores come from the reasons table. So the AI "likes" Rain Dance in
   proportion to how many of its own Pokémon benefit.
 - A random jitter can be added to each score. It is gated by a global switch, not a
-  trainer flag: `fn_8000815C` reads byte `lbl_8047882E`, which is **1 in the executable's data** (so on by default,
-  **verified**) and can be flipped from the debug menu's battle page (`fn_80007B30`, among the `dbgMenuFight*` functions: **likely**).
+  trainer flag: `fn_8000815C` reads byte `_fight_pokemon_status_menu_open_flag`, which is **1 in the executable's data** (so on by default,
+  **verified**) and can be flipped from the debug menu's battle page (`dbgMenuFightFlagEdit`, 0x80007B30: **likely**, its original name from XD's debug-menu file).
 - (**verified** from code, the executable's data and a replay): **each move's three AI functions.**
-  The move record's +0x1C indexes a table of 20-byte rows (`lbl_8035C430`); a row names the move's **value function**,
+  The move record's +0x1C indexes a table of 20-byte rows (`waza_func_data`); a row names the move's **value function**,
   its **hit check** ("would this move work right now?", `fightTrainerAiWazaHitNNN`, numbered by the move's effect id)
   and its **damage function**, plus two move-animation callbacks. Mud Sport's row: the generic value function
   `...ValueToriaezutukae` ("use it for now"), `fightTrainerAiWazaHit201`, `fightTrainerAiWazaDamage201`. Before the
@@ -617,9 +636,11 @@ partially matched function in `fight_range_80211A00.c`)
      a penalty when none of its moves can hit any opponent now on the field; bonuses for being the best candidate on
      each of two matchup measures; a bonus for each super-effective move it has against each opponent (type
      multiplier 0x41, x2) and an adjustment for each opponent move that is super effective against it; weather
-     bonuses by type (rain, sun, sandstorm and hail); an ability-based adjustment; and, when a debug-style switch
-     (`fn_8000815C`) returns 1, random noise of plus or minus the record's `LastValueRevise`, **one random draw per
-     candidate scored**.
+     bonuses by type (rain, sun, sandstorm and hail); an ability-based adjustment; and random noise of plus or minus the
+     record's `LastValueRevise`, **one random draw per candidate scored**. The noise is **on in normal play**: the
+     switch it checks (`fn_8000815C`, the byte `_fight_pokemon_status_menu_open_flag`) starts at 1 in the executable (**verified**), and only a
+     yes / no in a settings menu (`menuOpenCustom(0xE)`, which also holds volume, battle speed, rumble, the camera and a
+     Metronome move picker) changes it; that menu is **likely** the developers' debug settings (not checked in game).
 
   The bonus amounts come from the AI data tables (`fn_80239984`, value ids 0x1A-0x2C), not decoded yet. The flags are
   read through the trainer's status getter (`fightTrainerGetStatus` fields 0x1F `PokemonSelectRandomFlag`, 0x21
@@ -775,7 +796,7 @@ functions (floor, side, trainer, Pokémon, by status id: section "Per-Pokémon s
 
 ## Disc data
 
-- The action-kind table and the five priorities are in the executable (`main.dol` data, `lbl_80375BB8`).
+- The action-kind table and the five priorities are in the executable (`main.dol` data, `fight_action_kind_data`).
 - Move priority is the move record's byte at +4 (move table in `common_rel`; see pokemon-data.md / game-data-tables.md (not yet published)).
 - Held-item effect ids and their percentages (Quick Claw) come from the item table.
 - Condition lengths come from the condition definitions and the count table (above), both in the executable.

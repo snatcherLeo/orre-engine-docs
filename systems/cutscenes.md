@@ -10,8 +10,8 @@ from the decoded US scripts (counts over all 151 room scripts) and the camera co
 ## What it does
 
 A scene is a script function (started by a main-loop check, a talk, a trigger: events.md) that:
-1. **freezes the player**: `heroMoveInitEvent` (307 uses), and switches off the automatic field camera
-   (`std136_fieldClearFlag_8047ad71`, field-camera.md);
+1. **freezes the player**: `heroMoveInitEvent()` (307 uses), and switches off the automatic field camera
+   (`std136_fieldClearFlag_8047ad71()`, field-camera.md);
 2. **takes the camera**: `GSscene_SetMode(3)` (127 uses in 38 scripts) puts the scene in scripted-camera mode;
    cameras are then **placed by absolute position and rotation** (`std040_cameraSetPosition` +
    `cameraSetRotation`, 128 uses each: a cut), **moved** over time (`cameraMovePositionXYZ`, 81), **aimed at a
@@ -25,7 +25,7 @@ A scene is a script function (started by a main-loop check, a talk, a trigger: e
 4. runs things **in parallel** when needed: other functions of the same script as tasks (`scriptExecTask`, 8 uses,
    joined with `std006_threadWaitForCompletion`): the Outskirt Stand arrival scene moves two groups at once this way;
 5. **fades** between shots (`fadeSet`, 260 uses);
-6. **gives control back**: sets the story flag that stops it replaying, `heroMoveTermEvent`, and
+6. **gives control back**: sets the story flag that stops it replaying, `heroMoveTermEvent()`, and
    `cameraReturn(wait, duration)` (57), which glides back to the field camera (field-camera.md).
 
 The Outskirt Stand arrival scene (new-game-flow.md step 7) is a complete small example: two camera cuts, two

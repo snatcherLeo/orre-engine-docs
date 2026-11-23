@@ -120,6 +120,35 @@ is set (15 bits). Floats are 4 bytes. Multi-byte operands are big-endian.
 | 0xFE, 0xFF | | end (the particle dies next frame) |
 | other | | no operands, no effect |
 
+**the position and velocity commands (0x80-0x9F) use all three components even when they name
+fewer** (**verified** from the original code). Each command fills only the x / y / z its bits name into a local vector,
+then sets or adds all three. The components it doesn't name keep whatever that vector's memory held before. In the
+original program each of the four commands has its own place for that vector on the interpreter's stack (set position,
+move by, set velocity and add velocity each use a different slot), so a missing component is a leftover: from an
+earlier run of the same command at the same stack depth, or from whatever other code used that memory last. That makes
+the result depend on what ran before, not on the effect file alone. Pursuit's streaks rely on it (one of its move-by
+commands names only y and z). A port or tool that reproduces these effects has to give those components the console's
+values, not arbitrary ones. For Pursuit's move-by command (its x not given) the console's leftover is **0.0**
+(**verified** by a memory watch on an undisturbed run): Other code had left that memory at zero just before. It is
+"whatever the stack holds", so 0.0 is likely, not guaranteed, in other effects; the other three commands are not
+measured yet. The particle draws also use the game's one shared random sequence (`rng.md`), so
+anything that changes which random numbers particles get (a replay tool feeding in recorded numbers, for example)
+changes how sprays and spreads look while the battle itself stays the same.
+
+**the sleep loop's "Z" particles stay where they started** (**likely**, seen on the console): when a
+sleeping Pokémon is knocked back by a hit or falls as it faints, its Z's keep floating at the spot where the loop
+began instead of following the model. A port or mod that attaches the loop to the model would change how vanilla
+looks.
+
+**camera-facing bursts: emitters started by other particles** (**verified** from the code and, for
+the counts, from every move-effect file on the US disc). An emitter can carry a placement of its own (kind bit
+0x20000; a position, rotation and scale block). On the US disc **no emitter that a move-effect entry starts directly
+has one**, while **3,595 emitters started by other particles** (commands 0xA5, 0xEF, 0xF0) do. Nothing in the game
+sets that block's rotation or scale, only its position: the spawning particle's position. While the generator's byte
+at +0x72 is set (it owns its frames; command 0xF5 clears it), `psDispSubAppSRT` draws the particles' positions as
+offsets along the **camera's** axes around that position (the rotation of the inverse view matrix). So a burst a
+particle spawns always spreads out facing the camera, from wherever that particle was.
+
 ## Flow
 
 1. A room loads its type-10 entries through `floorReadParticle*`; a PKX or WZX bank is loaded by the model or move
@@ -133,6 +162,26 @@ is set (15 bits). Floats are 4 bytes. Multi-byte operands are big-endian.
    run natively (*verified*).
 3. The generator spawns particles every frame of its life; each particle runs its byte-code (above) and is drawn with
    its texture group, colours and size (`psdisp.c`).
+4. **How a particle is drawn** (**verified** from `psdisp.c` and per-step logs of recorded play):
+   `psDispMain` walks the particle lists twice a frame (the edge-sorted ones first, then the rest), sets each one's
+   blend mode, alpha test, colours and texture, and draws it. Every particle is drawn under the camera's own view
+   matrix with its **world positions worked out on the CPU**: the four corners of a square facing the camera, a line
+   from its last position to its current one (trails), or a point. A particle attached to a model has its place turned
+   into world space first. So a particle has no matrix of its own; its place is only in its vertices.
+5. **Particle slots are reused at once** (**verified**): a particle's life counts down by one each frame, and a freed
+   particle's memory is taken by the next new one straight away, so the same slot can hold a different particle on the
+   very next step (seen: the same address and generator, life 977 and then 1,000). Anything that tracks particles
+   across frames (a renderer blending between steps, a debugger) has to check the bank, the generator id and that the
+   life didn't go up, not only the address.
+6. **More from the code** (**verified** from the code):
+   - **One step is one 60 Hz retrace:** a battle running at 30 frames a second steps the particles twice per frame.
+   - **Pokémon emitters fire from animation tracks:** all 12 Pokémon effect models start their emitters from animation
+     tracks of one type (0x28); none uses joints flagged for particles. Torkoal's animation 4 also has tracks of type
+     0x2A, which set the point joint its "pull toward a point" command (0xB8) aims at.
+   - **A Pokémon's generator follows the joint's position only,** and emits along the world axes; once emitted, its
+     particles stay where they were, they don't follow the Pokémon.
+   - **No depth sorting:** a new particle goes to the head of its list, so within a sort group the newest is drawn
+     first.
 
 ## Disc data and tools
 
@@ -154,8 +203,11 @@ is set (15 bits). Floats are 4 bytes. Multi-byte operands are big-endian.
   effect files, the global effect archive and room archives.
 - **Hooks it would need:** a bank substitution by file and emitter id (particle packs, the shared asset library), and
   a separate random generator for particles a mod adds.
-- **Fixed-size limits:** the particle system's pools (live particles and generators per frame); a full pool drops
-  new particles.
+- **Fixed-size limits** (**verified** from the code): the particle, generator and placement
+  pools have **no fixed size**: none is allocated ahead, every allocator takes new memory from the game's heap when its
+  free list is empty, and freed objects go back on the lists. The real limits are the heap itself, **64 banks**,
+  **32 field banks × 64 slots** (a full field bank kills its oldest node to make room), **128 field nodes** in all
+  (past that, a new one isn't created), **8 point joints**, and fewer than 8 links.
 - **Must stay vanilla in GameCube-accurate mode:** the original banks, and their random draws on the shared
   generator (particles are the largest single user of it, rng.md).
 

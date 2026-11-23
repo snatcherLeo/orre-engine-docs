@@ -33,6 +33,28 @@ GameCube-GBA link cable. Pokémon are converted between the GameCube record (`Po
 - GBA -> GameCube: `pokeconvPokemonFromGBA(gc, gbaPokemon)` (0x9F8 bytes) and `gbaPokemonConditonFromGC`.
 - The attestation stamp on each Pokémon (`save-data.md`) records the origin game and language.
 
+### How the game looks for a GBA 
+
+Seen by logging every GBA driver call and every device probe, with the calling function, while Gang Battle and the
+Phenac trade counter were opened with no GBA plugged in (**verified** on the PC port; the functions **verified** in
+the code):
+1. **Getting ready:** `pkjbPrepare` (the "PKJB uploader", from its error strings) starts the GBA driver
+   (`GBAInit`), reads the disc ID for the boot key and loads the program a GBA will be sent from the disc.
+2. **The "Game Boy Advance connection" screen** (the console, the controller and a GBA in socket 2, "You must save
+   at a PKMN CENTER to connect!", "1P B Cancel") then waits in `fn_80087AE8`. That loop asks the serial port what
+   is plugged into the chosen socket (`SIProbe`) until it answers **0x40000, a GBA**, and it also leaves on the B
+   button (result 2, cancel) or when the message window is answered.
+3. **Nothing reaches the GBA driver** until a GBA is found: with "no device" (0x8) on socket 2, no `GBAGetStatus`,
+   `GBAJoyBoot`, `GBARead` or `GBAWrite` call was made. The program upload (`GBAJoyBoot`) and the data transfers
+   come only after detection.
+
+Gang Battle and the trade counter show the same connection screen and logged the same calls. So one shared module,
+`pkjb_uploader` plus the wait loop, serves every GBA feature (**likely**).
+
+**For a port** (and an emulator link later): a GBA link would have to answer the device probe with 0x40000 on the
+socket, then serve the boot upload and the reads and writes. Answering "no device" keeps the game on this screen
+until the player cancels, which is what the console does with nothing plugged in.
+
 ## Stats of imported Pokémon (researched 2026-10-15)
 
 - **The importer keeps the GBA's stats (verified, `pokeconvPokemonFromGBA` (0x8008BBDC) byte-matched):** after the boxed data it copies the

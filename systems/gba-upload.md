@@ -48,7 +48,7 @@ they are the payload of the second kind of upload (below).
 ## The second kind of upload: a payload for a GBA game (`gbaBootLoadImage` (0x8007B114), `gbaBootStartThread` (0x8007B350))
 (**verified** from the code; what the payload does is **likely** where marked):
 - `gbaBootLoadImage` (0x8007B114) builds the checksum table (`gPkjbCrcTable`), then picks **one of the three `bg0/1/2thumbcode.bin` files
-  at random** (`OSGetTick % 3`, names from the table `lbl_802EE608`), allocates a buffer (`gMenuLoadedBuffer`,
+  at random** (`OSGetTick() % 3`, names from the table `lbl_802EE608`), allocates a buffer (`gMenuLoadedBuffer`,
   size `lbl_8047A650`), reads the file into it **after a 0x34-byte header gap** and zero-pads the end; `lbl_8047A64C`
   marks it loaded.
 - `gbaBootStartThread` (0x8007B350) ("prepare the GBA upload context and worker") fills that header: the GBA device code (4 bytes), a

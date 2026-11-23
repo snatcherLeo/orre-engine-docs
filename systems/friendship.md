@@ -14,7 +14,7 @@ Every change is "event x friendship band -> amount", read from a small table.
 
 ## Data structures
 
-**The friendship table** (`lbl_8035F988` in the executable, count `lbl_80478B70` = 9; accessors
+**The friendship table** (`pokemon_friend_filter_data` in the executable, count `pokemon_friend_filter_data_number` = 9; accessors
 `pokemonFriendFilterDataBiosGetPtr(event)` and `...GetValue(record, band)`): one record of three signed bytes per
 event, one amount per friendship band. **All 9 records are identical to Gen 3's table** (`sFriendshipEventModifiers`,
 compared byte for byte, 2026-10-16), and the event numbers are Gen 3's:
@@ -38,7 +38,7 @@ traced).
 
 **Events 1 and 2 are never used** (**verified**: every call to this function and to its
 battle wrapper in `main.dol` and the code modules checked passes one of 0, 3, 4, 5, 6, 7 or 8). Items change friendship
-another way, as Gen 3's item effects do: the item-use code (`fn_80144574`) reads three amounts from the item's own
+another way, as Gen 3's item effects do: the item-use code (`itemUse2Pokemon`) reads three amounts from the item's own
 parameters (`itemParamGetFriend1Up` / `2Up` / `3Up`, one per band: below 100, 100-199, 200 and up) and applies the
 one for the Pokémon's band (`friendXUp`). So vitamins and similar items take their friendship change from item data,
 not from this table. `friendXUp` (the item-use path) applies the same rules as steps 1-5 below (**verified** from its
@@ -68,7 +68,7 @@ checks (below).
    fainted (status 0x7B: current HP is 0, `pokemon_get_status_exact_8012640C.c`): a fainted Pokémon gains nothing.
 2. **Band:** friendship below 100 = band 0, 100-199 = band 1, 200+ = band 2. For a Shadow Pokémon the band uses
    friendship plus its Shadow pool (0x99 + 0xC7).
-3. **Walking:** event 5 is skipped half the time (`GSrand & 1`), as in Gen 3.
+3. **Walking:** event 5 is skipped half the time (`GSrand() & 1`), as in Gen 3.
 4. **Amount** = the table's value for (event, band). If it is positive: x 150 / 100 when the held item's effect is
    27 (the Soothe Bell, Gen 3's friendship-boost effect), then +1 more if the Pokémon was caught in **item 11, the
    Luxury Ball** (item 11 and the Soothe Bell's effect 27 both checked in the US item table). (Gen 3 also adds +1 when the Pokémon is in the area where it was met; Colosseum does not.)

@@ -322,7 +322,7 @@ animation of this model" in one call.
 
 `HSD_AObjInterpretAnim` advances one AObj by its frame rate, loops it (`fmod` into
 [rewind, end)) or stops it at the end, then pushes the new values to the object through the FObj
-tracks. Two counters (`lbl_8047B38C` / `lbl_8047B390`) count running vs stopped animations per frame.
+tracks. Two counters (`nb_activeanim` / `nb_deadanim`, the developers' names) count running vs stopped animations per frame.
 
 ### Colosseum's HSD vs Melee's (found while matching, 2026-10-14)
 
@@ -380,7 +380,7 @@ pointer is a 32-bit offset until `Locate` turns it into a 32-bit address.
     432 of 434 sampled archives (models, maps, effects; the other two differ only in float rounding of a checksum).
   - Still open: game code that builds descriptions at run time or keeps its own copy of these layouts, and display
     lists / vertex arrays, which stay big-endian for the graphics layer.
-- **Class tables are code-filled data:** every class's `HSD_ClassInfo` (the method table; `lbl_8036C5F0` is the WObj
+- **Class tables are code-filled data:** every class's `HSD_ClassInfo` (the method table; `hsdWObj` is the WObj
   class's, 0x48 bytes on the GameCube) lives in the data section and is filled at start-up by the class's
   `info_init` (verified, `WObjInfoInit`). It is mostly function pointers, so in the PC port it is larger and must be
   defined and declared with its C struct type; code must reach the parent class through `head.parent`, not raw

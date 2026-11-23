@@ -5,7 +5,7 @@
 Status: **partial** (2026-10-14). Written for shiny colour editing and portrait (mugshot) work: texture formats and where textures live, how a Pokémon
 becomes shiny, and how portraits are stored. Evidence: `GStextureGetGXformat`
 (`src/game/gs_texture_getters_exact_800EF3E0.c`), `GStextureHandle` (`include/game/gs_texture.h`),
-`fn_801DE190` / `fn_801DCE0C` (`src/game/sequence.c`), the portrait lookup in
+`wazaSequencePokemonCreate` / `wazaSequenceOwnerApplyShinyColors` (`src/game/sequence.c`), the portrait lookup in
 `src/game/gs_range_80109C88.c`, and a survey of every texture entry on the USA disc.
 **How sure:** the functions named on this page byte-match the game, so the layouts, the format table and the code
 paths described are *verified* (read from matching C); the survey counts are *verified* by reading every texture; other
@@ -49,6 +49,9 @@ The file is a `GStextureHandle` as saved to disc, then the pixels:
 | 0x41 | IA4 | | 0xB0 | **CMPR** (S3TC/DXT1) |
 | 0x42 | I8 | | 0xA0 | I8 when drawn with alpha, else GX format 0x27 |
 
+**IA8's byte order:** each pixel is two bytes, **alpha first, intensity second** (**verified**: a decoder with them
+swapped draws wrong; the extraction tool's order is the right one).
+
 ### Survey of every type-9 texture (USA)
 
 | Where | Count | Formats | Typical sizes |
@@ -70,7 +73,7 @@ id is never written out as a constant elsewhere in the code.
 
 ## Shiny colouring (code)
 
-Two mechanisms, chosen per species by `fn_801DE190` (`src/game/sequence.c`):
+Two mechanisms, chosen per species by `wazaSequencePokemonCreate` (`src/game/sequence.c`):
 
 1. **Separate shiny model (35 species).** When the model is created as shiny, the species is looked
    up in `lbl_80374F20` (records of {u16 species, archive id, entry id}); if found, the `pkx_rare_*`
@@ -88,8 +91,8 @@ This agrees with StarsMmd's GameCube model addon documentation.
 
 ### Runtime recolour
 
-- Battle models have **no shiny textures**. When a model is created, `fn_801DE190(index, model,
-  variant)` loads the PKX and, if `variant` is nonzero, calls `fn_801DCE0C`, which applies the
+- Battle models have **no shiny textures**. When a model is created, `wazaSequencePokemonCreate(index, model,
+  variant)` loads the PKX and, if `variant` is nonzero, calls `wazaSequenceOwnerApplyShinyColors`, which applies the
   PKX's colour block: `GSmodelEnableColorSwap(model, r, g, b, a)` (a **channel swap**: which source
   channel feeds each of R, G, B, A) and/or `GSmodelEnableModulation(model, rgba)` (a **colour
   multiply**, 0x7F = unchanged).
@@ -163,24 +166,59 @@ data), or open.
 
 | Where | What is shown | How normal / shiny is stored | Status |
 |---|---|---|---|
-| Battle | 3D battle model (PKX) | 35 species: a **separate shiny model** (`pkx_rare_*`, table `lbl_80374F20`); all others: **one model**, recoloured at runtime from the PKX colour block (`fn_801DE190(..., pokemonCheckRare)`) | known (code) |
+| Battle | 3D battle model (PKX) | 35 species: a **separate shiny model** (`pkx_rare_*`, table `lbl_80374F20`); all others: **one model**, recoloured at runtime from the PKX colour block (`wazaSequencePokemonCreate(..., pokemonCheckRare)`) | known (code) |
 | Menus, party, summary, trade (portraits) | 42x42 portrait | **separate pixels**: bottom cell of the same `poke_face` sheet (menu-face record bit 7) | known (code) |
-| Body pictures (64x64, `poke_body`) | 2D body picture | **separate files**: `bodyNNN` / `bodyNNN_c` (species face[0] / face[1] body ids) | known (data); which screens use them: open |
-| PC box | **likely the 42x42 portraits** (no separate icon art exists) | if portraits: the same shiny cell as menus | **likely** (data); to confirm in-game |
-| Summary screen | portrait, body picture or 3D model? | | open |
-| Strategy Memo (Pokédex-like memo) | picture of each seen Pokémon | | open |
+| Body pictures (64x64, `poke_body`) | 2D body picture | **separate files**: `bodyNNN` / `bodyNNN_c` (species face[0] / face[1] body ids) | known (data); used by the **PC box** (below) and the Colosseum battle team screen |
+| PC box | the **full-body picture** of each Pokémon (`poke_body`) | normal or `_c` shiny file, chosen per Pokémon; Unown has its own table per letter | **verified** from the code |
+| Menus with a 3D Pokémon (the P★DA's Pokémon screens, gift and trade events, GBA transfers, the Colosseum registration screen) | the **battle model**, drawn into a picture through the menu Pokémon-model path (`menuPokemonModelRequest`, `_menuPokemonModelLoadThread`) | the battle model path with the **shiny variant passed** (`wazaSequencePokemonCreate(model, personality, shiny)`) | **verified** (code: callers in the P★DA, `gs_npc_event`, `gbaCommunication`, `menuCB`); which P★DA screen is the summary: **likely** |
+| Framing of that 3D view | camera distance from the model's **size class** (-2 to 3), plus a per-species scale and angle tweak for a handful of species (`memoGetScaleAngle`, in the Strategy Memo's code) | | **verified** (code); the tweak table lives with the Strategy Memo, so the memo **likely** shows the same 3D view |
 | Evolution scene, Pokémon Relive / purification, snag, trade | 3D model (the same PKX path is called from `evolution.c`, `pokemon_relive.c`) | presumably the battle model path, with the shiny flag passed (*likely*; to confirm per call) | open |
-| Overworld (Pokémon shown in the field, e.g. Castform, `powalen_b1`, in M1_out) | overworld model (type 2) | | open |
+| Overworld (Pokémon shown in the field) | overworld model (type 2) | | **three species have one** (**verified** from the disc's archive tables): **Castform** `powalen_b1` (room archive `M1_out`), **Plusle** `prasle_b1` (`M2_cave_1F_2`, `M2_guild_1F_1`) and **Umbreon** `blacky_b1` (only in the shared NPC archive `people_archive`, which also holds the other two). Where Umbreon's appears and what the scenes are: **open** |
 | GBA link / Pokémon Box transfers | data only (personality decides shininess) | n/a | known |
+| **Shadow Pokémon in menus** | the 3D menu model plays an extra **effect sequence** on loading: sequence **0x25** for a Shadow Pokémon, **0x87** while it is in Hyper Mode (status 0x3E) | not a different model or texture: an effect on top | **verified** (code, `faceKeyFromPokemon` and the load thread); that it is the black aura: **likely** (what the two sequences draw is not traced) |
+
+**Mug shot size** (**verified** on the disc for all 386 species): every mug shot picture is
+**42 × 42 pixels**. A viewer that wants them crisp draws them at a whole multiple of 42 screen pixels. The pictures
+sit in sheets in `poke_face.fsys` (texture entries of type 9): 369 sheets of 42 × 84 (the normal picture above the
+shiny one) plus 48 sheets of 84 × 84 (a second column), all RGBA8 except one RGB5A3 sheet. **XD** (checked on its disc,
+2026-11-18) uses the same archive and the same sheet sizes (375 of 42 × 84, 48 of 84 × 84), but stores every sheet as
+**C8**, 8-bit paletted, instead of RGBA8. **The pictures have no transparency** (**verified** for
+Eevee, Jolteon and Umbreon): every pixel is fully opaque, and the corners are near-black, so a mug shot is a square
+portrait on a dark background, not a cut-out face (**likely** the same for every species; the game shows them in
+framed boxes).
+
+**Mug shots facing the other way** (**verified** from the drawing code, `fn_8010B9E8` and its twin): the calling
+screen's sprite definition carries the width; when it is negative, a sheet wider than 42 pixels switches to its second
+column (a separately drawn other-facing picture) and draws it normally, while a 42-wide sheet keeps the negative width
+and is drawn **mirrored** (**likely**: the sprite drawer flips on a negative width). Only **31 species** have a drawn
+other-facing picture: Bulbasaur, Ivysaur, Clefairy, Clefable, Jigglypuff, Wigglytuff, Gloom, Kadabra, Farfetch'd, Dodrio,
+Kingler, Exeggcute, Exeggutor, Cubone, Marowak, Staryu, Cleffa, Igglybuff, Togepi, Mareep, Sneasel, Teddiursa, Silcoon,
+Cascoon, Spinda, Feebas, Absol, Banette, Seviper, Zangoose and Beldum (**verified**, the disc's sheets). Most are
+lopsided (Spinda's spots, Seviper's and Zangoose's scars, Absol's horn, Kadabra's spoon, Cubone's bone), where a
+mirror would put the feature on the wrong side (**likely** the reason). Which screens pass a negative width (the
+opponent's side of the battle HUD, for example): **open**, in the menu data tables.
+**Checked on every sheet** (**verified** by eye on all 31 pairs, plus a pixel test): in every pair the second cell is **the same face
+turned the other way**, a complete face (Farfetch'd's beak points left in one and right in the other; Spinda's,
+Clefairy's and Jigglypuff's features swap sides). **It isn't a pixel mirror:** flipped, the two cells share a median of
+8% of their pixels and never above 90%, so it's separately drawn art. Bulbasaur's and Ivysaur's pairs only look like
+one picture continued because both three-quarter views face inward toward the join (**likely**); the other 29 show
+clear seams there.
 
 **Where the PC box's Pokémon pictures come from** :
 - **There is no separate box-icon art on the disc** (**verified** from the archive list): the only per-species 2D art
   is `poke_face` (418 portrait sheets) and `poke_body` (826 body pictures). The PC box archives (`pcbox_menu`,
   `pcbox_poke_box`) hold frames, backgrounds and fonts, no per-species pictures.
-- **Body pictures are loaded by one screen only:** the Colosseum battle team screen (`menuColosseumBattle`) is the only
-  code that opens the body-picture archive (**verified**, every reference to its archive id).
-- **So the PC box shows either the portraits or the 3D models** (**likely** the portraits, the same 42x42 cells as the
-  party menu; not yet confirmed in-game or from the box screen's code, which is still mostly assembly).
+- **The PC box shows each Pokémon's full-body picture:** the code that loads the body-picture archive
+  (id 0x48A) is called from **the PC box screen itself** (`pcBoxStorageMain`, 0x80058150), and the box shows a still
+  full-body picture of each Pokémon.
+- **How the box gets them** (**verified** from the code): on opening, `pcBoxStorageMain` builds a list of body-picture
+  ids for every valid Pokémon in the party and in every box, then starts a background thread (`fn_80057E70`) that loads
+  them from `poke_body` one at a time, yielding between loads, so the screen opens without waiting for all pictures; the
+  thread can be cancelled, and the pictures are released when the screen closes. Each id comes from the Pokémon's
+  species face entry: the normal picture or the shiny `_c` one, depending on the Pokémon (status selector 0xC1,
+  **likely** "is shiny" from this use); **Unown** uses its own table of 28 letter forms (normal / shiny each,
+  `lbl_802676F0`).
+- So the PC box needs **no art of its own**: a new species shows in the box as soon as it has its two body pictures.
 
 ## The title logo (for texture packs and title-screen mods)
 
@@ -223,5 +261,5 @@ RGB5A3/RGB565/IA8 palette; a decoder for these formats reads every texture on th
 
 - Whether 42-wide portraits are flipped when facing the other way (to check in-game); how the faces
   were framed.
-- Shiny Pokémon shown outside battle (PC or summary 3D views): how they get their colours; check `fn_801DE190`'s other
+- Shiny Pokémon shown outside battle (PC or summary 3D views): how they get their colours; check `wazaSequencePokemonCreate`'s other
   callers.

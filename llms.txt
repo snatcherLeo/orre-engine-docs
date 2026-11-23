@@ -33,6 +33,7 @@ The shared layers everything else uses (HSD, Genius Sonority's graphics layer, m
 - [Resource registry: naming loaded data by (group, id)](engine/resources.md): A small global table that maps a two-part key, `(key1, key2)`, to a pointer.
 - [Fixed object pools (materials, lights, cameras, gapp tasks)](engine/object-pools.md): Instead of allocating each object when it's needed, each system preallocates an array of fixed-size slots at startup and hands out the first free one.
 - [Where the game keeps its state](engine/global-state.md): A map of the game's global state: for each system, the few globals that hold what it is doing, their types and where to read more.
+- [Addresses at a glance (Colosseum USA)](engine/address-map.md): One page of addresses: every static data table (where it comes from on the disc, where its pointer lives, record size, count), the key runtime structures, and the main accessor functions, each linked to the page with its field layout.
 - [RNG (random number generator)](engine/rng.md): The game's one shared random number generator (HSD's): its algorithm, how it is seeded from the clock, and what draws from it.
 
 ## Game systems (likely shared with XD)
@@ -56,7 +57,7 @@ Battles, Shadow Pokémon, the script VM, the field, menus, text and saves, built
 - [Trading](systems/trading.md): Trading is a full-screen menu room, `pokemonchange_menu` (room 0x394), opened by script command 198 (`std198_menuEnterTradingMenu`).
 - [GBA link and Pokémon conversion](systems/gba-link.md): Colosseum trades Pokémon with the GBA games (Ruby/Sapphire/FireRed/LeafGreen/Emerald) over the GameCube-GBA link cable.
 - [Sending programs to a Game Boy Advance (the PKJB uploader)](systems/gba-upload.md): The GameCube can boot a GBA over the link cable by sending it a small program ("multiboot").
-- [Player movement in the field](systems/player-movement.md): There is no separate "player object" loop: every room's **main-loop script** calls `heroMoveMain` once per pass (room record +0x34; new-game-flow.md step 7).
+- [Player movement in the field](systems/player-movement.md): There is no separate "player object" loop: every room's **main-loop script** calls `heroMoveMain()` once per pass (room record +0x34; new-game-flow.md step 7).
 - [NPCs (people) in the field](systems/npcs.md): Every character in a room, the player and the partner included, is a **person** in one pool of slots, identified by a **group** and an **index** (the room's characters are one group; the player is group 0, index 100,...
 - [The field camera](systems/field-camera.md): In a room the camera sits behind and above the player, described by **three numbers**: a **height**, a **distance** and a **yaw** (rotation around the vertical axis).
 - [Field: footsteps and step callbacks (poison, friendship, P★DA mail)](systems/field-steps.md): The overworld has no tile grid, so "a step" is distance: the player's movement work adds up the distance walked, and every **7.0 units** counts as one footstep.
@@ -83,6 +84,7 @@ Colosseum's own content: its story start, challenges, partner, TV news, trainers
 
 - [From power-on to Outskirt Stand: the front-end flow](colosseum/new-game-flow.md): Every stage of the front end is a **room** in the room table: the logos, the title, the opening movie and the first map.
 - [Colosseum challenges (story mode)](colosseum/colosseum-challenges.md): A Colosseum challenge is a **run of four battles in a row** against different trainers, the last one a boss, with the party healed between rounds.
+- [Battle Mode](colosseum/battle-mode.md): Battle Mode is the part of the game reached from the title menu instead of Story Mode.
 - [How Rui follows Wes (the partner follower)](colosseum/partner-follow.md): The field has **two party members**: member 0 (the player, character group 0 index 100) and member 1 (the partner, index 101).
 - [The TV news](colosseum/tv-news.md): Watching the TV plays one news broadcast chosen by story progress, then marks it as seen.
 - [Where and when trainers are met](colosseum/trainer-encounters.md): A trainer has no location of its own.

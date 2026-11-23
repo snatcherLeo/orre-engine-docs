@@ -22,7 +22,7 @@ command buffer with replay, the same idea modern renderers use, built in 2003 to
 
 ## Data structures
 
-### `GSgfxState` (behind `lbl_8047AA80`, 0x5A0 bytes on the GameCube)
+### `GSgfxState` (behind `gsgfxState`, 0x5A0 bytes on the GameCube)
 
 Allocated by `GSgfxInit` from the scratch memory (`GSscratchAlloc(3, notify)`) or,
 when no scratch is free, the tool heap (`_toolentryAlloc__FUl(sizeof(GSgfxState))`). The 3 is
@@ -67,7 +67,7 @@ checked at compile time (size 0x5A0 and key fields) under `#ifndef TARGET_PC`.
 - **Statistics** `lbl_804001F0` (22 words, zeroed at init): per-frame counters (GX state uploads, pass timings in
   ticks, peak request-buffer use at +0x28).
 - **State backup** `lbl_80400248` (`GSgfxState`): `_gfxScratchNotify` copies the state there when scratch slot 3 is
-  taken back and copies it into the slot again when it is returned; `lbl_8047AA80` follows the copy.
+  taken back and copies it into the slot again when it is returned; `gsgfxState` follows the copy.
 - **Vertex descriptors** (`GSVtxDesc`, 0x190 bytes on the GameCube; pool `lbl_8047AAAC`, count `lbl_8047AAB0`,
   allocated by `gfxVtxDescPoolInit`, 0x800D7B80). A descriptor says, for each of 14 GX vertex attributes (0 matrix index, 1 position,
   2 normal, 4-5 colours, 6-13 texture coordinates), whether it is present (`enabled`), how it is sent (`type`:
@@ -92,15 +92,15 @@ checked at compile time (size 0x5A0 and key fields) under `#ifndef TARGET_PC`.
 
 `GSgfxInit(requestBufferSize, mtxStackCount, vtxDescCount, dlCaptureCount, videoMode, efbHeight)`:
 
-1. `GSmathInit` (GQR setup for paired-single math), allocate the state and set every field (recordMode 2 during
+1. `GSmathInit()` (GQR setup for paired-single math), allocate the state and set every field (recordMode 2 during
    init, frameTarget `GSGFX_NO_FRAME`, capturePrimType -1, ...), clear the statistics.
 2. Pick the render mode from `videoMode`; hand it to the HSD video layer (`HSD_SetInitParameter` (0x8019C3C4)), then
-   `HSD_InitComponent` and `fn_800D37D4(videoMode, ...)` (VI / framebuffer setup).
+   `HSD_InitComponent()` and `fn_800D37D4(videoMode, ...)` (VI / framebuffer setup).
 3. Register three HSD hooks (verified from `src/hsd/video.c` and `cobj.c`): `fn_800D3F5C` as the post-retrace
    callback (`HSD_VISetUserPostRetraceCallback`: counts retraces, calls `retraceCallback`); `fn_800D3F50` as the GX
    draw-done callback (sets the flag `GSgfxRenderEnd` (0x800D3190) waits on, giving up after about 3 seconds of bus-clock ticks);
    `GSgfxSetViewportJitter` (0x800D3EC4) as the camera viewport function (`fn_80196C3C`): a game hook `lbl_8047AA88` if set, otherwise
-   `GXSetViewportJitter(..., VIGetNextField)` for jittered (interlaced) cameras or `GXSetViewport`, the same as
+   `GXSetViewportJitter(..., VIGetNextField())` for jittered (interlaced) cameras or `GXSetViewport`, the same as
    HSD's default.
 4. Allocate the request buffer (`gfxAllocRequestBuffer(heapSize)`), the matrix stack (`gfxMatrixStackInit`), the vertex-descriptor
    pool (`gfxVtxDescPoolInit`), the display-list capture table (`fn_800DB890`), and the default vertex descriptor
@@ -123,9 +123,23 @@ the `GXEnd` Aurora needs under the same test (`GS_PC_GXEND`).
 
 Each frame: game code records commands (recordMode 1). `GSgfxDrawScene` (0x800D3FA4) notes the request-buffer peak, switches to
 recordMode 2, plays the buffer back per pass for layer 0, draws a full-screen quad (alpha 0xC4) between the layers,
-plays it back for layer 1 (the quad resets depth to a fixed value so layer 1 draws over layer 0: likely, from
-`gfxSetZMode(1, 7, 2)` with the colour update off unless the debug toggle `overlayColorUpdate` is set), restores the
-mode and resets the write position.
+plays it back for layer 1, restores the mode and resets the write position.
+
+**The two layers and the depth reset** (**verified** with a frame capture and a depth log on
+the PC build; the functions involved are fully matched, so this is the console's own behaviour):
+- **Layer 0:** the models, then the particles linked to layer 0, through the opaque, texture-edge and translucent
+  passes.
+- **The depth reset:** colour and alpha writes off, the depth test set to "always", depth writes on, and one
+  full-screen flat quad at depth 29,999 against a far plane of 30,000. Everything layer 0 drew is now behind
+  whatever comes next.
+- **Layer 1:** the models flagged 0x200, then the particles linked to layer 1, in the same passes. So **overlay
+  effects** (Fire Punch's burst, for example) are never hidden by the arena floor or the room.
+- **What puts something in layer 1:** the model flag 0x200 decides both the model's layer (`GSmodelDrawAll`) and the
+  layer of the particles its animation spawns (`gsParticleCreate`). The screen effects' spawn path
+  (`effect_visual.c`) always uses layer 1. In moves (verified): a particle entry's mode bit 0, a model entry's flags
+  bit 0, and for the Pokémon playing the half, bit 1 of the sequence header's flags (effects.md, "Overlay effects draw
+  after a depth reset").
+- 
 
 Frame functions (verified from `gs_gfx_range_800D2B90.c`):
 
@@ -137,7 +151,7 @@ Frame functions (verified from `gs_gfx_range_800D2B90.c`):
   when `eraseEnabled`; for a texture target it calls `HSD_StartRender(3)`.
   (**verified** from a per-copy log of the game's own calls in a replay): Each model shadow is drawn
   into the top-left corner of the frame buffer and copied out **with clear**, one pass per shadow-casting group, every
-  frame. The shadow texture's size is set per scene (`HSD_ShadowSetSize` from `lbl_8047AB90` / `lbl_8047AB8C`): 384 x 384
+  frame. The shadow texture's size is set per scene (`HSD_ShadowSetSize` from `_modelShadowXsize` / `_modelShadowYsize`): 384 x 384
   in Outskirt Stand's opening (two or three shadows a frame), **640 x 480, the whole frame**, in a Colosseum battle (two a
   frame). Because the clear wipes everything the copy covered, the order above matters: shadows first, then the erase
   and the scene; anything drawn to the screen before a shadow pass in the same frame would be lost.
@@ -148,6 +162,13 @@ Frame functions (verified from `gs_gfx_range_800D2B90.c`):
   so white means "lit". Every receiver pixel outside the light's view reads the texture's outermost texel, **likely**
   through clamp-to-edge addressing; so that texel must stay white, or the whole receiver beyond the shadow's area
   darkens. The ground of the streets, battles and shop floors are receivers.
+  (**verified** from per-step logs of recorded play): **the shadow pass
+  doesn't always draw every piece of a model.** From one game step to the next, some pieces of a caster are drawn into
+  the shadow pass and then left out again: Nuzleaf's mouth piece switched 194 times in one recorded sitting, and the
+  two-bone wing panel of Nascour's Xatu 42 times during its faint. Over two sittings, about 6,300 to 6,600 "drawn"
+  switches and 5,200 to 5,300 "left out" switches were seen across 46 to 51 models. Why the game skips them is not
+  known yet. A renderer that blends between game steps must treat a piece that
+  appears or vanishes in the shadow pass as a cut, not blend it.
 - `GSgfxRenderEnd` (0x800D3190) **ends the frame**: GX flush and draw-done wait (about 3 seconds at most), HSD's frame end
   (`fn_8019C6FC`), copies a render-to-texture target out, `frameTarget = GSGFX_NO_FRAME`; then, if the updates are
   on, the end-of-frame updates (`fn_800D1070`, `GSlightUpdate`, model animation `GSmodelAdvanceAll(frameRetraces, 0)`, 0x800E3884)
@@ -187,6 +208,10 @@ the copied frame into every active capture's texture and calls the callback with
 captured so far and the user data; a callback that returns 0 ends its capture, and `GSgfxEndBackFBCapture(texture)`
 ends one directly (unlocks the image, frees the slot). This is how screen fades and transitions, some move effects
 and the title screen get the previous frame as a texture (blurs, wipes, freeze frames: likely, from the callers).
+(**verified** in a replay, with no frame smoothing): **the travel ride's speed trail** (Wes's bike
+between towns, for example Agate to Realgam Tower) is such a capture: the frame is copied and drawn again in the next
+step, which gives the trail. The flapping of Wes's coat tails at the end of the ride is the game's own animation (the
+same spike shows with smoothing off).
 In the PC port the slots hold pointers, so the slot table is larger and must be declared with its struct type.
 
 ### A frame with no display copy keeps its picture 
@@ -220,7 +245,7 @@ drawing meanwhile wasn't read. The steps:
    framebuffer's size"), format 0x44 (RGB565: no alpha, half the memory of RGBA8).
 2. **Opening** (`menuCreateOffScreen(time)`): register the texture as a back-framebuffer capture, **wait** (yielding
    the thread) until the capture callback reports that one frame has been copied into it, show it behind the menu, and
-   start a fade from full brightness to 50 % over `time`. The callers divide a constant by `fn_800D37CC`, and the
+   start a fade from full brightness to 50 % over `time`. The callers divide a constant by `fn_800D37CC()`, and the
    per-frame step divides the retraces that passed by the same value, so the fade likely lasts the same real time at
    30 or 60 fps.
 3. **Every frame** (`menuOffScreenDraw` (0x801093C8), called at the start of the menu system's frame, `menuDaemon`): advance the fade by
@@ -251,6 +276,14 @@ from logs and a readback of the texture, name entry, 2026-10-17):
    behind.
 
 The name entry shows a mode-2 window (naming a Pokémon) without a model: the callback returns early for it.
+
+**The summary page's Pokémon** (**verified** from per-step logs of recorded play) is drawn by a
+camera in **HSD's render pass 3** (`HSD_StartRender(3)`, the texture-target pass, the same pass number the projected
+shadows use), never in the normal screen pass. Its model holds its pose on every other game step while the page runs
+at 60 steps a second, so a renderer that blends between steps has to blend it over two steps, not one. **It is the
+render-into-a-texture path above** (**verified** from a replay's logs: every time the pass-3 camera was set, it came
+right after `menuModelRender` started its texture target with `GSgfxRenderLayer`, the call that opens HSD's pass 3),
+not a separate one.
 
 **The menu model record** (0x48 bytes, one per picture; from `menuModelInit`, `menuModelRender`,
 `menuModelSetMotion`, `menuModelFree` and the loader thread):
@@ -287,6 +320,35 @@ order of the display copy, the immediate renders and the replay must hold exactl
 output frame anywhere other than at the display copy draws the offscreen picture on top of the previous frame, and the
 copy's clear then leaves a black rectangle where the picture should be (**verified** on the PC port's name-entry
 screen: moving the frame end to the display copy fixed it).
+
+
+### See-through move models: how a material's render mode sets blending and depth 
+
+Moves like Surf, Mist, Haze and Barrier draw see-through 3D models (a water plane, a cloud). How they blend is decided
+by each material's **render-mode bits**, not by a per-effect setting (**verified** from HSD's state setup,
+`HSD_MObjSetup` -> `HSD_SetupRenderModeWithCustomPE` -> `HSD_SetupPEMode`, and from a GPU frame capture of Surf):
+- **A material with a PE descriptor** uses that descriptor's blend, alpha test and depth settings as given.
+- **Without one, HSD derives them from the render mode:**
+  - **translucent (0x40000000):** alpha blending, source alpha over inverse source alpha.
+  - **translucent plus no-depth-update (0x20000000):** depth is tested (less-or-equal) but **not written**, the alpha
+    test is off, and depth is tested before texturing. Surf's water is this kind.
+  - **translucent without 0x20000000:** depth **is** written, and the alpha test passes only pixels with alpha above 0
+    (tested after texturing). So one bit decides whether a see-through model hides what is drawn behind it later.
+- **When it draws:** HSD draws each model's joints in three sub-passes per layer: opaque (0x10), then 0x1000, then
+  translucent (0x2000), so see-through parts come after every opaque part of the same layer. Surf's water draws in the
+  first layer after Espeon's opaque body, so it covers only her parts below its surface (she has already written
+  depth). The white spray and bubbles on top are particles in the overlay layer, after the depth reset (**verified**).
+- **Its colour and its see-through amount (verified for Surf):** two colour stages: the texture's colour times the lit
+  vertex colour; the alpha comes from the **vertices**, not the texture. The water's vertices fade from about 50% in
+  the middle (127 of 255) to 0 at the edges. The scene lights are bright enough that the lit colour reaches full
+  white, so on screen the water shows its texture's own colour. The texture scrolls through a texture-matrix
+  animation.
+- **Likely** the same path for the other see-through move models (Mist, Haze, Waterfall's mist, Crabhammer's water
+  column, Barrier): the same rule from their render-mode bits, the translucent sub-pass, the first layer unless the
+  model is in the overlay layer.
+- **For an engine of your own:** encoding blend and depth in a few bits of the material keeps every effect consistent,
+  but it hides an important choice (does this see-through thing write depth?) in a flag that is easy to get wrong.
+  A modern material system would name it ("transparent, no depth write") and sort see-through draws back to front.
 
 
 ### Request-buffer commands (groups and formats verified from `gfxPlayCommands` and the recording setters; the
@@ -336,7 +398,9 @@ The game is built for a **4:3 picture of 640 x 480 logical pixels** (**verified*
   `setupBottomHalfCamera`) and **orthographic** (flat 2D, `C_MTXOrtho`). The game's own matrix helpers wrap the same
   calls (`GSmtx44Perspective`, `GSmtx44Ortho`). Which projection a camera uses comes from its data (hsd.md, the camera
   description).
-- **2D is orthographic in 640 x 480:** menus, windows and text, and the movie player's picture (`THPGXYuv2RgbSetup` (0x801E1FF8), the
+- **Menus, windows and text are drawn through a perspective camera** (**verified** from the code)
+  (`spriteSetEnv`) set up to cover the 640 x 480 screen, not an orthographic one. So 2D can't be told apart from 3D by
+  the projection type alone. The movie player's picture is still orthographic (`THPGXYuv2RgbSetup` (0x801E1FF8), the
   THP draw set-up, builds its own orthographic projection).
 - **Culling works in screen space.** Each frame, a model whose cull bit is set (models-animation.md (not yet published), flag 0x00100000)
   has the two corners of its bounding box projected through the current camera onto the screen (`fn_80191118`,
@@ -391,7 +455,7 @@ view (verified in the PC port).
 - **Pointers held in 32-bit words (2026-10-15, done in GSgfx):** descriptors and matrices travel as typed pointers
   (`GSVtxDesc*`, `GSMtxStackEntry*`). The request buffer keeps one 32-bit word per argument, so the four commands
   that record a pointer (0x26 texture, 0x2a display-list capture, 0x46 vertex descriptor, 0x47 descriptor + count)
-  store it with `PC_PTR32` and `gfxPlayCommands` turns it back with `PC_PTR`; the descriptor pool base, the
+  store it with `PC_PTR32()` and `gfxPlayCommands` turns it back with `PC_PTR()`; the descriptor pool base, the
   display-list end alignment and the frame-target sentinel test do the same. This relies on the port keeping game-visible memory below 4 GB
   (debug builds check every conversion). The matrix / colour command formats copy
   their data into the buffer, so they need nothing.
@@ -449,7 +513,7 @@ view (verified in the PC port).
 **Frame-rate independence (verified from the code, `gsParticleUpdate` in `field_range_80117E58.c`):** the particle
 system runs one simulation step (`psInterpretParticles` + `psExecGenerator`) per VI retrace that passed during the
 last frame (`frameRetraces`), so particles keep real-time speed when the game drops to 30 fps. When
-`GSgetVersionMajor` (0x800057A0) returns 2 (likely the 50 Hz PAL mode), one extra step runs every
+`GSgetVersionMajor()` (0x800057A0) returns 2 (likely the 50 Hz PAL mode), one extra step runs every
 5 frames, which brings 50 Hz up to 60 steps per second, the NTSC rate the effects were tuned for (likely). For the
 port: an uncapped or 144 Hz frame rate must keep feeding the particle system retrace-equivalent steps (60 per second),
 not one step per rendered frame. (The parameter is named `particleCount` in that file; it is a step count.)
@@ -464,14 +528,14 @@ run slower instead of skipping ahead. Every system then advances by `frameRetrac
 - particles run one step per retrace (above);
 - models get `GSmodelAdvanceAll(frameRetraces, 0)` plus one `GSmodelAdvanceAll(1, 1)` and one `gsParticleUpdateAll(1)` (0x801181B0) per retrace;
 - lights (`GSlightUpdate`) and the other end-of-frame updates take the count;
-- game code reads it through `GSgetFrameStep` (0x800D3088; it returns the retrace count). Menus run their tick
+- game code reads it through `GSgetFrameStep()` (0x800D3088; it returns the retrace count). Menus run their tick
   callbacks that many times, and the title turns it into seconds with `frameRetraces / GSgfxVideoVsyncRate`.
 
 So the game logic is a **fixed step of one retrace (1/60 s)**, run once or twice per drawn frame.
 
 **The rate is chosen per scene (verified, the callers of `fn_800D3074`).** `fn_800D3074(n)` sets `minFrameRetraces`;
 1 = 60 fps, 2 = 30 fps:
-- rooms: `fn_801127BC` (floor.c) sets 1 for room kinds 5 and 6 and 2 for kinds 1-4 and the rest; another floor.c
+- rooms: `flooSetFrameRate` (floor.c) sets 1 for room kinds 5 and 6 and 2 for kinds 1-4 and the rest; another floor.c
   path resets to 1;
 - battle menus: `menuFight.c` switches between 1 and 2;
 - the title: 2;
@@ -490,7 +554,7 @@ the logic itself, which is why timing-sensitive scenes break.
 - **Why some scenes didn't reach 60 (likely):** where the hardware can't finish a frame in one retrace, the real
   rate stays lower.
 - **Why there were timing glitches (likely):** code that counts drawn frames instead of reading `frameRetraces`
-  speeds up. Candidates: wait loops that call `_threadSwitch` a fixed number of times, and anything tuned for
+  speeds up. Candidates: wait loops that call `_threadSwitch()` a fixed number of times, and anything tuned for
   30 fps scenes.
 
 **What this means for the port (likely).**
@@ -564,7 +628,7 @@ collision-disable button, "GSgfx info on / off" and BGM volume.
 ## Region notes
 
 - Video modes 1-4 (`GSGFX_VMODE_*`: NTSC, PAL50, PAL60, MPAL) pick the render mode at init; USA uses NTSC.
-- `gsParticleUpdate` adds one particle step every 5 frames when `GSgetVersionMajor` (0x800057A0) returns 2, to keep 60 steps per
+- `gsParticleUpdate` adds one particle step every 5 frames when `GSgetVersionMajor()` (0x800057A0) returns 2, to keep 60 steps per
   second at 50 Hz. In the USA build `GSgetVersionMajor` (0x800057A0) returns the constant 1 (verified, `main.c`), so the branch is never
   taken. `main.c` calls it a "major version"; its use here and the shared numbering (1 NTSC, 2 PAL, as
   `GSGFX_VMODE_*`) suggest it is the build's video standard (likely): a PAL build would return 2.
@@ -573,4 +637,4 @@ collision-disable button, "GSgfx info on / off" and BGM volume.
 
 ## Open questions
 
-- What `GSgetVersionMajor` (0x800057A0) returns in the PAL build (to confirm the video-standard reading).
+- What `GSgetVersionMajor()` (0x800057A0) returns in the PAL build (to confirm the video-standard reading).

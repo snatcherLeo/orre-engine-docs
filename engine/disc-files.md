@@ -78,7 +78,9 @@ both count as *verified*; fields left blank are not identified yet.
 | 0x28.. | runtime area (the load state the reader keeps per entry); 0x11111111 filler on disc. The reader's view of it is `{u32 state, u32 buffer address, u32 ready}` (`FSYSSubEntry`, the slot's `currentSub` points at it), so the game writes run-time state into the loaded archive's own bytes | disc, code |
 
 Note: the decomp's header names 0x08 `compressedSize`, 0x14 `decompressedSize` and 0x20 `groupID`; the
-disc shows 0x08 is the unpacked size, 0x14 the stored size and 0x20 the type (**verified**).
+disc shows 0x08 is the unpacked size, 0x14 the stored size and 0x20 the type (**verified**). The loader sizes its
+buffers from these two fields of each entry, so an archive whose entries have other sizes loads with no code change
+(**verified** by loading the Japanese disc's larger Rui models in the US game).
 
 **Compressed data:** a 16-byte header ("LZSS", unpacked size, stored size, 0), then LZSS with a
 4,078-byte (0xFEE) window: flag bytes, bit = 1 literal, bit = 0 back-reference.
@@ -146,6 +148,15 @@ screen refreshes at the game's 30 frames per second, before 2000). So a reload f
 - **Engine lesson:** a second, slower memory used as an archive cache is a good way to stretch a small main memory,
   but its latency becomes part of the game's timing; a modern engine would keep such caches out of anything
   frame-exact (replays, RNG).
+- **How a cached entry is found, and how one is dropped** (from the code; verified in the PC port): each
+  entry is cached under three keys, the archive's id (its header's +0x08), the entry's group and the entry's name hash
+  (`fn_8017F928` stores, `fn_8017F794` finds). When an archive is loaded again, every entry found there is copied back
+  from ARAM (the slot shows state **161**, then 162) instead of being read from the disc; only entries not found are
+  read. The game drops a whole archive's copies only to make room (`fsysCacheMakeRoom`: the oldest archive in its
+  list of cached archives, `fn_8017F800` by archive id, then that list entry removed). So **the cache never notices a
+  file on the disc changing**: on the console it can't, but a port or a mod that swaps a file's bytes while the game
+  runs (a port's per-language files, swapped while the game runs) must
+  drop that archive's copies the same way, or the old bytes come back.
 
 ## One archive load at a time, and the pending queue (from the code; verified in the PC port)
 The file system works on **one archive at a time**: the manager keeps one **active slot**, and a load asked for while

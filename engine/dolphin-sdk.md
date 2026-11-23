@@ -14,9 +14,9 @@ these calls, so for a PC port **this is the layer to replace** (*likely*).
 
 ## Data structures
 
-- **`__CARDBlock`** (`lbl_803FC620`, 0x220 bytes = two 0x110-byte `CARDControl` blocks, one per
-  memory card slot). Owned by the CARDBios unit (*verified*) (`src/dolphin/sdk_range_800AF8A0.c`); the CARD
-  code in other units reaches it as `extern` (`&lbl_803FC620[chan]`).
+- **`__CARDBlock`** (0x803FC620, 0x220 bytes = two 0x110-byte `CARDControl` blocks, one per
+  memory card slot). Owned by the CARDBios unit (*verified*); the
+  CARD code in other units reaches it as `extern` (`&__CARDBlock[chan]`).
 - **Apploader header** (`lbl_803FB820`, the SDK's `Header` in OSReboot.c; 0x20 bytes, 32-byte
   aligned): date string, entry point, size, reboot-code size (*verified*).
 

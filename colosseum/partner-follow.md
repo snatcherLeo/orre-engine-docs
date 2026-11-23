@@ -14,7 +14,7 @@ index 101). One of them is the **leader**, steered by the controller; the other 
 the follower **replays the leader's recent path** and, when that's not needed, walks straight at the leader, keeping a
 fixed gap.
 
-## Data structures (the move work `lbl_80426BD0`, proposed `gHeroMove`)
+## Data structures (the move work `HeroMove`, proposed `gHeroMove`)
 - per member: a "present" flag, a **spacing** (0 for the leader, **12** for the first follower, 24 for a second),
   a neck (head-tracking) mode, a stuck timer, footstep state;
 - `leader` (0 or 1);

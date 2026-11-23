@@ -14,7 +14,7 @@ byte), menus and effects all use these ids. A static table describes each id.
 
 ## Data structures
 
-### Target-data table (`lbl_80375AC8`, 30 entries of 8 bytes; count 0x1E in `lbl_80478D40`)
+### Target-data table (`fight_target_data`, 30 entries of 8 bytes; count 0x1E in `fight_target_data_number`)
 - `+0x00` u8 **kind** of object (`fightTargetDataBiosGetStatusKid`): the object kind of the game's generic status
   system (`status.c`): 5 a Pokémon, 6 a move, 7 the battle floor, 8 a side, 9 a trainer, 4 an item (**verified** from `statusSetStatus`). So entry 0x1B (kind 6) names a move and entry 0x1D (kind 4) an item.
 - `+0x01` u8: nonzero = an addressable target (the reverse search only considers these).

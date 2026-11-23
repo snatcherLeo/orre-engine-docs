@@ -24,11 +24,11 @@ from the console clock at boot and never reseeded, so every draw anywhere shifts
   (`HSD_Rand`, 0x801ADCD8, in `src/hsd/hsd_pobj_range_801AA608.c`; it is HSD's `HSD_Rand`, the same code as Melee's
   `random.c`, so the generator belongs to the HSD library, not to the Orre Engine). The state lives behind the
   pointer `lbl_80478C94` (Melee: `HSD_RandSeedPtr`, which `_HSD_RandForgetMemory` resets to a static seed).
-- Front ends, all advancing the same state once per call: `GSrand` (0x800E0C54, u16),
-  `HSD_Randf` (0x801ADC7C, float = (state >> 16) / constant), `HSD_Randi(max)` (0x801ADC3C,
+- Front ends, all advancing the same state once per call: `GSrand()` (0x800E0C54, u16),
+  `HSD_Randf()` (0x801ADC7C, float = (state >> 16) / constant), `HSD_Randi(max)` (0x801ADC3C,
   `max * (state >> 16) / 0x10000`), `fn_800E0BA0` (sum of two `HSD_Randf` minus a constant = two
   advances) and `GSrandf` (0x800E0BE4, one `HSD_Randf`).
-- **Seeding:** `fn_800E0C78` sets the state from `OSGetTime` (the low 32 bits of the time base). **Verified in Dolphin
+- **Seeding:** `fn_800E0C78` sets the state from `OSGetTime()` (the low 32 bits of the time base). **Verified in Dolphin
   2026-10-15** (with a scripting build of Dolphin): it runs about 1.0 s after boot (frame 119), and the seed
   follows the console clock: seed = low 32 bits of (seconds since 2000-01-01 x 40,500,000, the time-base rate, + about 40,381,700); with the
   clock at the GameCube epoch the seed is 0x02682D0F. The start-up does draw. Right after seeding, the game-loop thread's save-data setup
@@ -52,9 +52,10 @@ from the console clock at boot and never reseeded, so every draw anywhere shifts
 
 | Caller | Evidence | Status |
 |---|---|---|
-| Battle code (damage rolls, accuracy, AI, ...): ~120 `GSrand` call sites in `fight_*` files | call sites in the decompiled code | verified (call sites), per-use meaning open |
+| Battle code (damage rolls, accuracy, AI, ...): ~120 `GSrand()` call sites in `fight_*` files | call sites in the decompiled code | verified (call sites), per-use meaning open |
 | Pokémon creation (personality, IVs): `pokemon_range_8011F5FC.c` (8 sites) | call sites in the decompiled code | verified (call sites) |
 | Save data (`hero_savedata_exact_80129280.c`: the save's random id) | call sites in the decompiled code | verified |
+| **Every save written to the card** : the save task's setup (`memcardSaveSetup`, `memcard.c`) fills a 20-byte padding field after the save block with `GSrand()` bytes, one draw per byte, so each save advances the shared sequence by 20 | the code (`memcardFillRandom`) | verified (code); that the padding is never read back is **likely** (nothing in the load path checks it) |
 | Particle system (`ps_range_80168C64.c`: emission angles, spreads, lifetimes) via `HSD_Randf` | call sites in the decompiled code; in battle the largest share of draws (see "Measured in battle" below) | verified |
 | HSD bytecode interpreter (`hsd_range_801920E4.c`: random ranges) via `HSD_Randi` | call sites in the decompiled code | verified |
 | Menus, `kaisuu.c`, battle camera (`battleCameraStartRandom`) | call sites and names in the decompiled code | verified (sites) |
@@ -63,7 +64,7 @@ from the console clock at boot and never reseeded, so every draw anywhere shifts
 **Idle blinking draws every frame in battle** (**verified** from the code and a PC trace; console
 counts from Dolphin). Each battle model runs a blink check every game frame. When the model is not playing a move
 sequence, is not already blinking (byte +0x19 = 0) and its blink flag is not off (+0x18 bit 8), a timer at +0x20
-counts up by `GSgetFrameStep` (the screen refreshes the frame took). From 10 on, it draws **one `GSrandf` per game
+counts up by `GSgetFrameStep()` (the screen refreshes the frame took). From 10 on, it draws **one `GSrandf` per game
 frame** and starts the blink texture animation if the draw is below a threshold: t(2 - t) / 60 with
 t = (timer - 10) / 50 while the timer is under 60, then 1/60, and 1.0 from 180, so a blink is certain by 180.
 - **While the command menu waits**, these checks are the only per-frame draws: **3 per game frame** at Willie's first
@@ -137,6 +138,15 @@ Because particles draw from the **same** generator, any room with active particl
 the RNG every frame, by an amount that depends on how many particles spawn: such areas are
 "noisy", rooms without per-frame random users are "quiet" (measured per room below). NPC wandering and animated
 models may also call it (open).
+
+**The title, the main menu and the Options screen are quiet** (**verified** in the PC port: every draw
+counted per room in 60-frame windows over a scripted run, with pictures of the main menu and the Options screen to
+confirm where it was): **no draws at all** while waiting on the title (about 110 seconds, its sparkles included), on the
+main menu (about 70 seconds) or on the Options screen, nor when moving the cursor or changing Rumble there. The only
+draws before the story are the start-up burst (the empty save made at boot: 1,018 draws for that run's seed) and, when
+the title hands over to the main menu with no save on the card, the same burst again; loading an existing save draws
+none. So how long a player waits on these screens doesn't change their luck; what they choose there (New Game, Continue,
+a save made or loaded) does. 
 
 **Measured in battle** (**verified** in the PC port with a caller trace of the generator, and consistent
 with a per-frame count in Dolphin): in Willie's battle, between the first command menu and Espeon's first hit, the game
@@ -222,14 +232,14 @@ trainer's ID (`pokemonBiosSetCatchTrainerRnd` / `GetCatchTrainerRnd`). The train
 | Creating a PID with constraints | `pokemonCreateRndFit(pkm, gender, nature, shinyMode, otId)` (0x80124410, `pokemon_range_8011F5FC.c`) | loop: draw a PID, reject it if gender or nature (`PID % 25`) don't fit, then the shiny test `pokemonCreateRndFitSeedHit` against `otId`: `shinyMode` 1 = must be shiny, **0 = must not be shiny**, -1 = don't care. |
 | **Opponents' Pokémon, incl. Shadow Pokémon** | `fightTrainerCreateFightTrainerPokemonDataIdToPokemon` (`fight_trainer_range_801F7F80.c`), called from the trainer setup above it with `heroGetStatus(enemyTrainer, 2, 0)` | calls `pokemonCreateRndFit(..., shinyMode 0, enemy trainer's ID)`: the PID is **rerolled until it is not shiny for the enemy's ID**. Then the Pokémon is added to the enemy's party with `heroCatchPokemon`, which writes the enemy's ID as its OT. |
 | Shadow Pokémon met again | same function, Shadow branch | if the Shadow entry's story flag is set (`darkPokemonCheckFlag16` (0x801EE8F4) -> `std081_flagCheckTrue`), the PID saved at the first meeting is reused (`darkPokemonSaveGet8` (0x801EE750), Shadow runtime slot +8); otherwise a new PID is made as above and saved there (`darkPokemonSaveSet8` (0x801EE7BC)). So the PID, and so the shiny outcome for the player, is fixed at the first encounter. |
-| **Shininess shown in battle** | battle Pokémon setup (`fight_out_pokemon_suffix_80207C6C.c`, near the `fightOutPokemonGetRndStatus` call) | copies the battle Pokémon's PID and OT (the enemy's ID) into a temporary, calls `pokemonCheckRare` and passes the result to `fn_801DE190` (model choice, shiny recolour). Because of the reroll above this is always "not shiny" for an opponent's Pokémon. |
+| **Shininess shown in battle** | battle Pokémon setup (`fight_out_pokemon_suffix_80207C6C.c`, near the `fightOutPokemonGetRndStatus` call) | copies the battle Pokémon's PID and OT (the enemy's ID) into a temporary, calls `pokemonCheckRare` and passes the result to `wazaSequencePokemonCreate` (model choice, shiny recolour). Because of the reroll above this is always "not shiny" for an opponent's Pokémon. |
 | **Re-check after the snag** | `heroCatchPokemon` (`hero_savedata_exact_80129280.c`) | copies the Pokémon, then `pokemonSetCatchStatus(..., heroGetStatus(player, 2, 0), playerName)` writes the **player's** ID as the OT; the PID is kept. From then on `pokemonCheckRare` uses the player's ID, so the Pokémon is shiny with the usual 1-in-8192 chance (independent of what battle showed). |
 
 So Colosseum doesn't recalculate the PID after the snag. It only changes the OT, and the same
 shiny test gives a new answer. The quirk: battle always shows "not shiny" (the reroll against the
 enemy's ID), while the snagged Pokémon can be shiny.
 
-**RNG cost (verified, code).** Each PID candidate is two `GSrand` calls
+**RNG cost (verified, code).** Each PID candidate is two `GSrand()` calls
 (`pokemonCreateRndFitRand32`: high half, then low half). Every rejected candidate (wrong gender,
 wrong nature, or shiny for the enemy's ID) costs two more calls. The anti-shiny reroll rejects a
 candidate about 1 time in 8192, so it rarely adds calls, but vanilla mode must keep it to keep the
@@ -276,7 +286,7 @@ make.
 ## In later Genius Sonority games 
 
 **Pokémon Battle Revolution** (Wii, 2007) keeps the same generator, as its public decompilation (pbr-ret/pbr-decomp,
-`src/gs/math/GSrand.cpp`) shows: `GSmath::initRand` seeds it from `OSGetTime`, the seed starts at 1, and the LCG is
+`src/gs/math/GSrand.cpp`) shows: `GSmath::initRand` seeds it from `OSGetTime()`, the seed starts at 1, and the LCG is
 inlined across the code; that project's own comment notes it is equivalent to sysdolphin's `HSD_Rand` and asks whether
 that's a coincidence. Colosseum answers it: here the generator **is** HSD's `HSD_Rand` (**verified**, above), and the
 game's own `GSrand` front ends sit on top of it. PBR no longer links the HSD library (it uses Nintendo's Wii

@@ -16,10 +16,14 @@ every **7.0 units** counts as one footstep. Each footstep calls up to **8 regist
 | `cbPoison` (`cbPoison__Fl15FootStepCounterl`) | hero movement init | field poison (below) |
 | `cbTsureFriend` | hero movement init | friendship walk counter (below) |
 | `cbStep` (`mailMain.c`) | `mailMainInit` | P★DA mail delivery (below) |
-| `fn_801ED3B8` | `fn_801ED388` (id kept in `lbl_8047B5B8`) | heart gauge while walking, the day care, a story step counter (below) |
+| `fn_801ED3B8` | `sodateyaHeroCallBackInit` (id kept in `lbl_8047B5B8`; called once from game start-up) | heart gauge while walking, the day care, a story step counter (below) |
 
 The callback names are the original ones (mangled C++ names survive for two: `FootStepCounter` is the original name of
-the step counter). *Tsure* = "companion": `cbTsureFriend` is the party's walking friendship.
+the step counter). The fourth one's registration is `sodateyaHeroCallBackInit` (*sodateya* = the
+day care), the original name from XD, where the same function registers XD's `_sodateyaCallBackFunc` (**verified**:
+same position after `sodateyaInit` and same code). So the developers filed this walking callback under the day care,
+even though it also drives the heart gauge. Colosseum's own callback is a different size from XD's, so it keeps its
+address name for now. *Tsure* = "companion": `cbTsureFriend` is the party's walking friendship.
 
 **Healing by script** (**verified**, `gs_range_801C766C.c`): script command 216
 (`std216_partyStatusUpdate_8ae(mode)`) heals the whole party (mode 0, the same `fn_801D0AFC` the blackout uses) or
@@ -33,7 +37,7 @@ a Battle Mode run, pause-menu.md; no healing between battles there).
 
 ## Data structures
 
-In the hero movement work (`HeroMoveWork`, `lbl_80426BD0`):
+In the hero movement work (`HeroMoveWork`, `HeroMove`):
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -57,7 +61,7 @@ In the hero movement work (`HeroMoveWork`, `lbl_80426BD0`):
    message 0x444F, **half the money is lost** (`heroDecPokedoru(money / 2)`), the whole party is healed
    (`fn_801D0AFC(1)`: `pokemonAllKaihuku` on each), and condition 0x3E (Hyper Mode, likely) is cleared from every
    Pokémon. Then the game **warps to a return point** (`floorReturnToSavedRoom` (0x80113FE8)): a script-set one if a script has set it
-   (script command 161, which stores a room id, a second id and an entry index in the field state `lbl_80408378`
+   (script command 161, which stores a room id, a second id and an entry index in the field state `_floorChangeInfo`
    +0x48-0x50 and flags it at +0x51), otherwise the one in the save header (fields 5, 7 and 8: room id, second room id,
    entry index; save-data.md "Save header"), and requests that room (`floorRequestChange`). So the save header's
    "floor" fields are a return point the scripts keep up to date. (**verified** from the decoded
@@ -115,8 +119,8 @@ In the hero movement work (`HeroMoveWork`, `lbl_80426BD0`):
    decomp's field name `sortMode` for +0x444 and the comments on `fn_801D228C` / `fn_801D1364` are wrong.) The `mailMain.c` comments calling `cbStep` "Waza multi-hit effect setup" are wrong.
 
 ## Disc data
-**The mail record** (**verified** from its accessors in `mail.c`; table `lbl_80478E9C`,
-count `*lbl_80478E98`; 0x2C bytes; the decomp types it as `WazaEntry`, a wrong name). The table is in its own small module, entry `mail` of `common.fsys` (a REL), whose
+**The mail record** (**verified** from its accessors in `mail.c`; table `mailData`,
+count `*mailData_number`; 0x2C bytes; the decomp types it as `WazaEntry`, a wrong name). The table is in its own small module, entry `mail` of `common.fsys` (a REL), whose
 prolog points the four globals at its data section: the Shadow lists at +0x000 (count at +0x6B8), the mail table
 at +0x138 (count at +0x6BC) (**verified**: found from every module's prolog stores, checked here
 against the module's relocations).

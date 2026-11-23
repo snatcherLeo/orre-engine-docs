@@ -2,15 +2,15 @@
 
 **Applies to:** Colosseum (**verified**, USA GC6E01) · XD (**likely**: the same engine layer; not checked against XD)
 
-Status: **partial** (2026-10-16): file format, layout rules, registration and every font on the US disc are
-decoded; two font ids the text uses are missing from the disc (open questions).
+Status: **partial** : file format, layout rules, registration and every font on the US disc are
+decoded, including the five main fonts (ids 0-4) the game registers at startup.
 Related: [messages.md](../systems/messages.md) ("Fonts": the first write-up, and how text, fonts and translations fit together).
 
 ## What it does
 
 All in-game text is drawn from bitmap fonts: each character is a small 4-bit greyscale picture, looked up by its
-Unicode code point and copied into a texture when it is first needed. The game keeps a few **font ids** (0 = the
-normal 22-pixel font, 1 = a smaller 18-pixel font, 3 = a third 18-pixel slot); text switches between them with a
+Unicode code point and copied into a texture when it is first needed. The game keeps **five font ids** (0 = the
+normal 22-pixel font, 1 and 3 = two 18-pixel fonts, 2 and 4 = two 13-pixel fonts); text switches between them with a
 control code. Every font id can be made of several font files chained together: a big main font loaded at startup,
 plus a small extra font each room or menu brings along with just the extra characters its own text needs.
 
@@ -23,7 +23,7 @@ src/game/gs_msg.c): a list of fonts, ended by font id 0xFFFF (a font whose size 
 |---|---|---|
 | +0x00 | u16 | font id (the slot it joins) |
 | +0x02 | u8 / u8 | cell width / cell height in pixels |
-| +0x04 | u32 | size of this font in bytes (the next font starts at the next 32-byte boundary) |
+| +0x04 | u32 | size of this font in bytes: the next font starts exactly at this header + size (the game adds it as is, `GSmsgFontOpen`; in the main font file the second font starts at 0x14ED0, not on a 32-byte boundary) |
 | +0x08 | u16 | glyph count |
 | +0x0A | u16 | 0 (reserved; 0 in every font on the disc) |
 | +0x0C | u32 | bitmap data offset, counted from **header + 8** (a quirk: header + offset is 8 bytes short) |
@@ -53,8 +53,9 @@ fixed number of files per slot.
 
 ## Flow
 
-1. **Startup** (`main.c`, after `GSmsgInit(2, 5)`): registers the three fonts stored in main.dol (`lbl_8027A500`,
-   `lbl_802BD260`, `lbl_802C0CB0`), then common_rel resource 1. The main.dol fonts are byte-identical to common_rel
+1. **Startup** (`main.c`, after `GSmsgInit(2, 5)`): registers the font files stored in main.dol (`lbl_8027A500`,
+   `lbl_802BD260`, `lbl_802C0CB0`; the first is the main font file, a chain of **five** fonts, ids 0, 1, 3, 2 and 4,
+   "The main font file holds five complete fonts" below), then common_rel resource 1. The main.dol fonts are byte-identical to common_rel
    resources 0, 2 and 3 (*verified*). Resource 1 is an **empty font file** (only the end marker).
 2. **Room or menu load**: every room and menu archive has a resource-type-6 entry (named after the archive, or
    `system_tool`, `pocket_menu`, `name_entry_menu`, `tool_fight`, `fight`, `card_e`, `jis_1`, ...); the room loader's
@@ -75,6 +76,27 @@ fixed number of files per slot.
 | room / menu fonts | 160+ archives | 0, 1, 3 | 22 / 18 | 1 to ~100 | the extra characters that room's text uses (often just one glyph) |
 
 Text usage of the font switch (all message banks): font 0: 454 messages, 1: 353, **2: 16, 3: 349, 4: 11**.
+
+**The main font file holds five complete fonts** (**verified** in the PC port (the decompiled code running natively): the font registration
+log with each bank's glyph count and character range, on a scripted start-up). The first file `main.c` registers is a chain of five fonts, each with a full character
+set from U+0020 to U+FF5A, registered in this order:
+
+| Font id | Cell | Glyphs | Used for (from the message banks and the battle HUD) |
+|---|---|---|---|
+| 0 | 22 px | 408 | dialogue, most menus |
+| 1 | 18 px | 408 | smaller text |
+| 3 | 18 px | 405 | 349 messages, words such as "POWER" (a second 18-px style; how it differs from font 1 not yet looked at) |
+| 2 | 13 px | 405 | small inserts (the gender sign on the battle HUD) |
+| 4 | 13 px | 405 | small inserts (the battle HUD's level, HP and name; stat labels) |
+
+The files that follow (the 59 extra font-0 glyphs, the 354 font-1 kanji, the one-space font 3, then each room's few
+extras) only add characters to these slots. So the table above under-reports the main file: earlier readings saw only
+its first font. *For a font renderer:* five styles in three sizes (22, 18, 13 px), each to be matched against a
+reference face at its own size (the MS PGothic match below was checked at 22 px only). The five start at 0x0, 0x14ED0,
+0x242D0, 0x31DD0 and 0x3AA40 in the file (fonts 0, 1, 3, 2, 4: font 3 is 0xDB00 bytes; **verified**, the same offsets
+found by mapping the file's records and by the registration log). Another decomp's extractor names ids 3 and 4
+"18-condensed" and "13-condensed" (**likely**: a narrower version of fonts 1 and 2; not compared yet here). Font 3's
+screens aren't confirmed; message 0x1A5 "POWER" points at the move details (**likely**).
 
 **Which level-1 kanji `jis_1` leaves out** (**verified** against the JIS X 0208
 level-1 table, rows 16-47): `jis_1` holds 2,920 of the standard's 2,965 kanji and nothing outside it. The 45 it leaves
@@ -225,6 +247,23 @@ Each symbol is described in words.
 The e / e+ / é glyphs also sit at the era-name squares (㍼ ㍽ ㍾). Only β is used by the US text. For a translation or a modern font, these code points must be mapped back
 to their real meaning (₽, speech bubble, e-Reader marks), not drawn as the standard character.
 
+### The battle status panel: what is text and what is a picture
+
+The panel beside each Pokémon in battle (its mug shot, name, gender, level and HP bar) mixes
+two kinds of lettering:
+- **Pictures, not text** (**verified**: both are drawn in a shared menu texture sheet, next to the HP and EXP bars):
+  the yellow **"Lv"** and the dark red **"HP"** labels. A different font can't change them; a sharper version means a
+  new picture (a texture replacement).
+- **Text, through the message system** (**verified** from the panel's draw callback and its message templates; see
+  [message-windows.md](../systems/message-windows.md), "Which code draws each context"):
+  - the **level number** and the **HP numbers** (current and maximum): one template that switches to **font 4**;
+  - the **name**: a template in **font 4**;
+  - the **gender sign** (♂ / ♀): a template in **font 2**.
+
+  Fonts 2 and 4 are the small 13 × 13 fonts in the game's program file, not the main 22-pixel font (Open questions,
+  below). So a new font system has to cover those two small fonts as well as the main one: the numbers, names and
+  gender signs in battle come from them.
+
 ## Hints at the original font
 
 - **No name or metadata survives**: the font headers' reserved fields are zero in every font, no string in main.dol or
@@ -248,11 +287,110 @@ to their real meaning (₽, speech bubble, e-Reader marks), not drawn as the sta
   - So the main font was most likely **assembled from two typefaces** (*likely*): Western letters from MS PGothic,
     kana (and probably the kanji) from a Japanese gothic. Japanese game fonts often mix sources this way.
 
+### The four smaller fonts and the Japanese disc (2026-11-13)
+
+**Only the 22 px font is MS PGothic.** The method above was repeated on fonts 1 and 3 (18 px) and 2 and 4 (13 px):
+the printable ASCII letters of each (the same 92 as above), read straight from the main font file, compared with Windows' grey rendering
+of installed faces at the font's size and one or two pixels either side, plain and bold, normal and narrowed. As a
+check, this method on font 0 reproduces the earlier result (MS PGothic at 22 px: shape agreement 0.934, the game's
+width = MS PGothic's + 1 px for 91 of 92 letters).
+
+- **What the four look like** (*verified*, by eye on the letters at 6x):
+  - **font 1, 18 px:** a **bold, wide** sans;
+  - **font 3, 18 px:** a **bold, narrow (condensed)** sans: the same height as font 1, much narrower letters;
+  - **font 2, 13 px:** a **light, wide** sans, generously spaced;
+  - **font 4, 13 px:** a **bold, very narrow** sans.
+  So the pairs differ by **width and weight**, not size: 1 and 3 are the wide and condensed 18 px styles, 2 and 4 the
+  wide and condensed 13 px styles (which fits the "18-condensed / 13-condensed" names in other tools' notes).
+- **No installed face matches them** (*verified* for the faces tried): MS PGothic, MS Gothic, MS UI Gothic, Meiryo,
+  Yu Gothic, Arial, Arial Narrow, Tahoma, Verdana, Segoe UI, Bahnschrift, Franklin Gothic Medium and Impact, each
+  plain and bold, at the size and one or two pixels either side, normal and narrowed. The best shape agreement is
+  **0.72-0.77** (font 1: Arial Bold at 19 px, 0.77; font 3: Franklin Gothic Medium bold, narrowed, 0.75; font 2: Arial
+  Bold at 15 px, 0.72; font 4: MS Gothic bold at 15 px, 0.72), far below MS PGothic's 0.93 on font 0, and no face
+  reproduces the advance widths (the best match about half the letters). So these four were **not made from MS
+  PGothic**, and their source typeface is still unknown.
+- **For a font renderer:** MS PGothic covers only font 0's look. Fonts 1-4 need their own reference faces.
+- **Open fonts scored against fonts 1-4** (2026-11-13; *verified* scores). Method as for font 0's open fonts: each
+  candidate drawn at 4x and shrunk, the ink compared with the game's glyph at the best offset (this second method
+  gives MS PGothic 0.902 on font 0, with the +1 px width rule holding for 87 of 92 letters; the 0.934 above comes from
+  the first method, drawn at the font's own size, so the two scores aren't directly comparable). Candidates (all under the SIL
+  Open Font License): the variable fonts **Archivo, Noto Sans, Roboto, Saira** (searched across width and weight) and
+  **Inter** (weight), plus Barlow (normal, semi-condensed and condensed bold), Fira Sans (condensed and
+  extra-condensed bold), M PLUS 1p (medium, bold) and Zen Kaku Gothic New (bold). A first pass at whole pixels, then a
+  finer search around the best (half-pixel sizes, smaller width and weight steps):
+
+  | Game font | Closest open font (setting) | Shape | Runner-up |
+  |---|---|---|---|
+  | 1 (18 px, bold wide) | **Archivo**, width 105, weight 600, drawn at 19 px | 0.797 | Inter bold 0.766 |
+  | 3 (18 px, bold condensed) | **Archivo**, width 62 (its narrowest), weight 500, 18.5 px | 0.728 | Saira width 62.5, weight 600, 0.697 |
+  | 2 (13 px, wide) | **Archivo**, width 105, weight 650, 15 px | 0.765 | Inter bold 0.736 |
+  | 4 (13 px, very condensed) | **Roboto**, width 75, weight 600, 15.5 px | 0.725 | Archivo width 66, weight 600, 0.707 |
+
+  - **Archivo is the closest for three of the four** (*verified* among these), and one variable font can serve all
+    four widths: one file, tuned per font. Roboto is a little closer for font 4.
+  - **They're close in style, not the same typeface** (*likely*): the scores stay around 0.73-0.80, below MS PGothic's
+    0.90 on font 0, and the finer search only gained up to 0.02, so these candidates have reached their limit. Font 3
+    sits at Archivo's narrowest setting, which suggests the original is narrower still.
+  - **Later candidates did no better** (*verified*): Anybody (which goes narrower, to 50% width), Encode Sans and Mona
+    Sans scored 0.62-0.78; extra emboldening and a slight horizontal squeeze added at most 0.01 (font 3: 0.740
+    squeezed to 0.92x with +0.25 px).
+  - **How the four are built** (*verified*: each glyph resized to the other's ink box and compared):
+    - **Fonts 1 and 3 share the same kana, pixel for pixel** (agreement 1.000), and so do **fonts 2 and 4**. Only the
+      Latin letters differ.
+    - **Fonts 3 and 4 have the same condensed Latin design at two sizes** (0.90); fonts 1 and 2 the same wide design
+      (0.84, a bold and a light weight).
+    - The small fonts' kana are a **different, bolder design from font 0's** (0.74-0.76).
+    So the game has **one kana set per size (18 and 13 px), each paired with a wide and a condensed Latin set**:
+    three designs to identify (the wide Latin, the condensed Latin, the bold kana), not four.
+  - **The small fonts' kana** (*verified* scores; the same ink-agreement method on the 161 hiragana and katakana,
+    Windows' grey rendering, regular and bold, at the size and a pixel either side): no installed Japanese face is
+    clearly the original. Best for the 18 px kana: **Meiryo Bold 0.714**, VL Gothic Bold 0.705, BIZ UDGothic Bold
+    0.684; for the 13 px kana: **VL Gothic Bold 0.729**, BIZ UDGothic Bold 0.710. For comparison, the same method gives
+    font 0's own kana 0.67 with BIZ UDGothic (the face chosen for them), so these are in the same range. The kana are
+    fixed-width, and BIZ UDGothic (like Meiryo) matches the game's width for all 161. So **BIZ UDGothic Bold** is the
+    natural choice for the small fonts' kana (*likely*): within a few hundredths of the best, the same family as font
+    0's kana, and under an open licence, where Meiryo comes only with Windows.
+  - **How the letters were made: the grey levels** (*verified* counts; *likely* reading). The glyphs store 16 grey
+    levels (0-15). Counting which levels each set uses:
+    - **The condensed Latin (fonts 3 and 4) uses only a handful of shades:** font 3 uses just 3, 6, 10, 13 and 15;
+      font 4 almost only 6, 10, 13 and 15. A typeface drawn smoothly at a small size spreads its edge pixels across the
+      whole range, as font 0 (the MS PGothic render) does. So the condensed Latin was most likely **drawn pixel by
+      pixel with a small shade palette** (*likely*), and there may be **no typeface behind it to find**.
+    - **The kana of every font use the full range** (every level from 1 to 15, in about the same proportions as font
+      0's), so they were most likely **rendered from an outline typeface** (*likely*).
+    - **The wide Latin is in between:** font 2's uses the full range; font 1's mostly 11, 14 and 15 with a few
+      others.
+  - **Commercial Japanese gothics checked against the 18 px kana** (*verified* scores, the same method, from the
+    foundry's own online type tester): **Fontworks Rodin Pro B 0.751** and **New Rodin Pro B 0.752**, against 0.738
+    for BIZ UDGothic Bold measured the same way; **Heisei Kaku Gothic** (Adobe Fonts' public preview) scored lower,
+    best **W7 0.713** (W3 0.617, W5 0.690, W9 0.688). Rodin Pro B's own Latin letters scored only **0.626** against
+    the wide 18 px Latin (font 1), so the Latin didn't come from Rodin either. **No credit names a font maker**
+    (*verified*): neither the US nor the Japanese staff roll (both are videos, both in English) has a font or foundry
+    line, and the program files and text hold no foundry or font-file names. None of them is the original (an exact match scores about 0.9); by eye
+    the game's さ and ア have level, full-width top strokes that neither has.
+  - **For a port's renderer:** placing each letter in the game's own width (the slot) keeps the layout unchanged
+    whichever font draws it; Archivo (Roboto for font 4) gives the closest look among these free fonts.
+
+**The Japanese disc** (*verified*, read from its program file): its main font file holds **three fonts, not five**:
+22 px, 18 px and 13 px (ids 0, 1 and 2). There are no condensed fonts 3 and 4, which fits the Japanese text lacking
+the messages that switch to them.
+- **Font 0's Latin letters are a different design:** none of the 92 printable ASCII letters is the same picture as
+  the US one, they're much wider (on average 14.5 px per letter against the US 11.7 px), with thinner strokes, so the
+  Japanese 22 px Latin letters are **not MS PGothic**.
+- **Fonts 1 and 2 are the same design as the US ones:** the same widths for 89 and 88 of 92 letters, with only small
+  pixel differences.
+
 ## Changing it
 
 - **Adding characters** (translations): append glyph records (keep them sorted), add the bitmaps, update count, size
   and data offset. A room font can extend a font id for one room only.
 - Keep widths honest: the width is also the advance, and there is no letter spacing to fall back on.
+- **Drawing letters with another font** : every glyph passes one place, where its 4-bit picture is
+  copied into the text atlas (`_msgMakeTexture`, called from `msgSetChar` and the ruby-text draw). A replacement drawn
+  into the original glyph's own box (its width, its row count and its vertical offset), on the font's baseline (the
+  bottom of 'H'), changes how letters look and nothing else: the width is the pen's advance and the quad's width, and
+  each picture is placed at its own offset (H 7 rows below the line's top, y 12, a comma 19). Drawing into a fresh box
+  from the line's top instead cuts every descender (**verified**: "Story" read "Storv" in a first try).
 - A new font id needs a slot: the line gap rule gives any id other than 0 and 1 a gap of half the cell height + 1.
 - The port can replace the whole path with a modern font renderer (outline fonts at any size); the metrics above are
   what it must reproduce for a faithful layout (window sizes and line breaks were tuned to them).
@@ -285,15 +423,31 @@ glyphs their own text needs instead of shipping one huge font, and the main font
 - Labels the game prints itself (for example the COLOSSEUM BATTLE list's "Lv50" / "Lv100" / "Lv???", made with a
   `sprintf` into a Shift-JIS buffer and converted by `SJIStoGSchar`) take the same lookup as message text: a code no
   registered font has draws as a solid white box, which is how a byte-order slip in that conversion shows on screen
-  (**verified** in the PC port (the decompiled code running natively) build against a Dolphin frame).
-- **Font 3** is switched to by 349 messages, including words (e.g. message 0x1A5 "POWER"), but no font 3 on the disc has
-  letters: the main one holds only a space, the Card e menu's `system_tool` font 3 a space and a quote mark
-  (*verified* from the glyph lists). Same check needed.
+  (**verified** in the PC port build against a Dolphin frame).
+- **Font 3** has a full 405-glyph
+  18-px font: the fourth font in the main font file (section "The main font file holds five complete fonts" above); the
+  one-space font 3 and the Card e menu's two-glyph one are extras on top (**verified**).
+- The source typeface of fonts 1-4 is still unknown (the open fonts scored above don't match it).
 - Whether room fonts are unregistered when the room unloads.
 
 ## Region notes
 
 The fonts hold Unicode code points, so the format itself is region-neutral, but the US main font keeps the full
-Japanese kana set and kanji leftovers, and resource 1 is empty. Which fonts the Japanese and PAL versions put in ids
-0-4 is not compared yet. PAL languages would need more Latin glyphs (see messages.md, "Which
+Japanese kana set and kanji leftovers, and resource 1 is empty. The Japanese game has ids 0-2 only (below and the Japanese disc section above);
+the PAL fonts match the US ones for every shared letter (regions.md). PAL languages would need more Latin glyphs (see messages.md, "Which
 languages the fonts support").
+
+(**verified** by reading both discs and by drawing the Japanese text with the US program):
+- **Where the Japanese game keeps its fonts:** its main fonts (the common kanji 大, 発, 先, 団 among them) are inside
+  its `main.dol`: font files for three ids, 0, 1 and 2, in 22, 18 and 13-pixel cells (six font records in all; the
+  main font file's three, above, among them). Its `common_rel` holds no font at all, while
+  the US game keeps its main fonts in `common_rel`.
+- **Kanji per room and menu:** each archive carries font files (resource type 6) with only the kanji that room or menu
+  needs, in font 0 (22 x 22) and font 1 (18 x 18), plus one large kanji font (`jis_1`, font 0; 2,920 kanji by the count above). The US
+  disc's files carry far fewer kanji in font 1 (276 against 827).
+- **Furigana** (the RubyStart / RubyTop / RubyEnd codes, 0x04 to 0x06) are drawn with **the current font at half
+  scale**, not a separate font: `GSmsgInitRuby` measures the kanji run and the reading, and `msgDrawRuby` draws the
+  reading centred over the kanji, its letters spread across the kanji's draw time.
+- **All the Japanese disc's messages use the US disc's message numbers** for the same message (9,414 of the US disc's
+  11,647; the US disc's extra ones are its own), and its banks carry no language tag (bytes 6-7 are 00 00, in six
+  banks 00 01).

@@ -74,6 +74,17 @@ the code and the arithmetic):
   heap at "8048E740h -> 8130E740h" (**verified**).
 - Consequence: more GSmem for a mod means less SDK heap (and so less room for HSD), because the split is a constant,
   not a calculation.
+- **How full the SDK heap gets in play** (**verified** in Dolphin by walking the heap's lists
+  every 600 frames over two long story sittings): it never climbs over time; it keeps returning to near empty (under
+  60 KB at quiet moments), and its highest point in the Realgam Tower battles, the heaviest stretch measured, is
+  **1.66 MB, 46%** of the 3,628,544 bytes. Most of what it holds is small: 64-, 96-, 192- and 224-byte cells (HSD
+  objects and texture-expression nodes, each with the allocator's 32-byte header). So the console leaves about 2 MB of
+  headroom there.
+- **When an allocation fails, the game hangs** (**verified** from the code): HSD's default allocator asserts the
+  result, the assert calls `HSD_Panic`, and the game's panic routine (`fn_800060F0`) formats a report (the message,
+  file and line, and a walk of up to 32 stack frames) and then **calls itself with that report**, again and again,
+  each call nesting deeper on the stack. The game simply stops; nothing is shown to the player (likely: on the console
+  the nesting runs on through memory below the stack until something breaks; not observed directly).
 - **The first GSmem blocks, in boot order** (**verified**: each address follows from the previous
   block's size rounded to 32 bytes, and the graphics buffer's address is printed by the game's own log): the log's
   text buffer (64 KB at 0x8048E740), the log's line-length table (1 KB at 0x8049E740), the thread pool (20 records of
@@ -95,7 +106,7 @@ the cheat-device side is **likely**, from how Gecko-style code handlers are know
   off from the real bounds and corrected in code).
 - **When:** six times: at the very start of `main`; at the end of the game's start-up (`mainGameThread` (0x80005AAC)); in the first
   run of the reset-countdown task (`mainClearExceptionVectors` (0x80005CE4), which also erases the vector tails); when the movie player starts
-  (`fn_800366A8`); and at the start of the two logo screens (`movieTpcStart`, `movieGsLogoStart`). Each erase starts at
+  (`movieBootStart`); and at the start of the two logo screens (`movieTpcStart`, `movieGsLogoStart`). Each erase starts at
   a slightly different address (0x80001800, 0x80001801, 0x80001803, 0x80001805), **likely** for the same reason as
   the shifted table.
 - **Effect on a console or emulator:** any code handler or hook installed before boot is erased, so cheat codes

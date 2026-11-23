@@ -59,6 +59,10 @@ they are equal, the Pokémon "has no nickname" and gets the new species' name; o
 no separate "nicknamed" flag. Shedinja-style extra Pokémon get the new species' name the same way. So anything that
 changes the species name table (a translation, a capitalization change) also changes this check: a Pokémon created
 under the old names would then count as nicknamed and keep its old species' name after evolving.
+(**verified** from the code): Every copy and comparison of a species name here goes through one
+function, `GSmsgGetGSchar` (a message taken as a plain string). So a port that shows the game in more than one
+language can keep the stored names in the save's own language by answering that function with the original text,
+and translate the names only where they are shown.
 
 **The evolution scene** (**verified** from the code: `evolutionOpen`, `evolution`,
 `evolutionStart`, `evolutionDemo`):
@@ -91,6 +95,22 @@ in Colosseum Eevee cannot become Espeon or Umbreon by friendship.
 
 ## Disc data
 The evolution slots are in the species table (`common_rel`, pokemon-data.md).
+
+**What the US disc uses** (**verified**, a count of every filled evolution slot): **184 slots**.
+- **Level** (kind 4): 135.
+- **Friendship**: 9, including Espeon's kind 2 and Umbreon's kind 3, which never fire here (no clock).
+- **Plain trade** (kind 5): 4 (Kadabra, Machoke, Graveler, Haunter).
+- **Trade holding an item** (kind 6): 8 (King's Rock twice, Metal Coat twice, Dragon Scale, Up-Grade, DeepSeaTooth,
+  DeepSeaScale).
+- **Using an item** (kind 7): 21, **all of them evolution stones** (Water Stone 5, Moon Stone 5, Leaf Stone 4, Fire
+  Stone 3, Thunderstone 2, Sun Stone 2). So on this disc "stone evolution" and kind 7 are the same thing.
+- **Tyrogue's stat comparisons** (kinds 8 to 10): 3.
+- **Wurmple's personality split** (kinds 11 and 12): 2.
+- **Shedinja** (kind 14): 1.
+- **Feebas's Beauty** (kind 15, Beauty 170): 1.
+
+Kinds 0 (empty) and 13 aren't used. An editor can group these by what triggers them (level-up, trade, using an item)
+for display; the kind number stays what the game reads.
 
 ## Changing it
 - New evolutions with the existing kinds: data only (slot kind, parameter, target).

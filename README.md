@@ -34,6 +34,7 @@ apply to XD too; the game-specific pages (battles, story, scripts) describe Colo
 - [Resource registry: naming loaded data by (group, id)](engine/resources.md)
 - [Fixed object pools (materials, lights, cameras, gapp tasks)](engine/object-pools.md)
 - [Where the game keeps its state](engine/global-state.md)
+- [Addresses at a glance (Colosseum USA)](engine/address-map.md)
 - [RNG (random number generator)](engine/rng.md)
 
 ### Game systems (likely shared with XD)
@@ -80,6 +81,7 @@ apply to XD too; the game-specific pages (battles, story, scripts) describe Colo
 
 - [From power-on to Outskirt Stand: the front-end flow](colosseum/new-game-flow.md)
 - [Colosseum challenges (story mode)](colosseum/colosseum-challenges.md)
+- [Battle Mode](colosseum/battle-mode.md)
 - [How Rui follows Wes (the partner follower)](colosseum/partner-follow.md)
 - [The TV news](colosseum/tv-news.md)
 - [Where and when trainers are met](colosseum/trainer-encounters.md)
@@ -108,8 +110,8 @@ XD hasn't been studied yet.)
 
 ## How these were made
 
-The docs were researched and written with AI assistance, working from the game's decompiled code and its behaviour,
-then reviewed and organised by snatcherLeo. Mistakes are possible; the labels above say how sure each claim is.
+The docs were researched from the game's decompiled code and its behaviour, then reviewed and organised by
+snatcherLeo. Mistakes are possible; the labels above say how sure each claim is.
 Corrections are welcome: open an issue on this repo.
 
 ## What's not here

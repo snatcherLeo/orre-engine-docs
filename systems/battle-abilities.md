@@ -8,7 +8,7 @@ behaviour. Companion to [battle-engine.md](battle-engine.md) and [battle-turn-fl
 
 ## What it does
 
-An ability is just an id on the Pokémon. The ability table (`pokemonTokuseiDataBiosGetPtr`, `lbl_8035F5E0`) holds
+An ability is just an id on the Pokémon. The ability table (`pokemonTokuseiDataBiosGetPtr`, `pokemon_tokusei_data`) holds
 only a **name and a description** message per ability; **all behaviour is code** that compares the id at the place
 where the ability matters (damage, accuracy, speed, switching in, end of turn, ...). There is no ability script or
 hook table.
@@ -59,7 +59,7 @@ rows the "what it does" column is Gen 3's behaviour at that check (**likely**).
 | 47 | Thick Fat | damage | halves Fire and Ice |
 | 48 | Early Bird | move checks (`_wsHitCheckJoutaiSub` (0x8022F2F8)) | sleep counter advances two at a time |
 | 51 / 52 | Keen Eye / Hyper Cutter | stat-drop code | block accuracy / Attack drops |
-| 53 | Pickup | the "pickup" script command (0xE5, `wsCmdE5` (0x80214B58)) | the script command does **nothing** (a 16-byte stub that only steps the cursor, **verified**); Pickup runs **after the battle** instead: `fightActionFlowSyuuryouPost` calls `heroCheckSetMonohiroiAllTemotiPokemon` for the party when the battle kind's Pickup rule (status 0x30) is on (**verified**). Per Pokémon with Pickup and no held item, a 1-in-10 roll (`GSrand % 10 == 0`), then `GSrand % 100` picks from a table of 10 {u16 item, u16 cumulative chance} pairs: the first pair whose chance is above the roll (**verified** from code) |
+| 53 | Pickup | the "pickup" script command (0xE5, `wsCmdE5` (0x80214B58)) | the script command does **nothing** (a 16-byte stub that only steps the cursor, **verified**); Pickup runs **after the battle** instead: `fightActionFlowSyuuryouPost` calls `heroCheckSetMonohiroiAllTemotiPokemon` for the party when the battle kind's Pickup rule (status 0x30) is on (**verified**). Per Pokémon with Pickup and no held item, a 1-in-10 roll (`GSrand() % 10 == 0`), then `GSrand() % 100` picks from a table of 10 {u16 item, u16 cumulative chance} pairs: the first pair whose chance is above the roll (**verified** from code) |
 | 54 | Truant | move checks, end of turn | acts every other turn |
 | 55 | Hustle | damage, accuracy | x1.5 Attack, lower accuracy |
 | 57 / 58 | Plus / Minus | damage | x1.5 Sp. Atk with the partner ability |
@@ -87,7 +87,7 @@ The ability groups, each one `switch` statement whose case list is exactly one o
 | absorbing (move of the absorbed type) | `fightCheckTokuseiWazaKyuushuu` (0x8022DCB8) | Volt Absorb 10, Water Absorb 11, Flash Fire 18 |
 
 **Inside the contact group** (**verified** from code): Static (9) triggers on a contact hit
-while the attacker is still on the field, with a **1-in-3 roll** (`GSrand % 3`, one draw from the shared
+while the attacker is still on the field, with a **1-in-3 roll** (`GSrand() % 3`, one draw from the shared
 generator); it then sets the status to inflict (0x45) and runs the shared "ability inflicts status" battle script
 (`lbl_8037992F`, **likely** used by all of them). Flame Body (49 = 0x31) is the same with 0x43 (burn). A byte list
 {1, 2, 5} filled next to this code is **likely** Effect Spore's pick of status.
@@ -115,7 +115,7 @@ Gen 3) (**likely**).
 
 ## Disc data
 
-The ability table (name and description message per ability) is in the executable (`lbl_8035F5E0`, 0x3A8 bytes); the
+The ability table (name and description message per ability) is in the executable (`pokemon_tokusei_data`, 0x3A8 bytes); the
 behaviour is all in code. Which species has which ability is in the species table (pokemon-data.md).
 
 ## Changing it

@@ -127,7 +127,7 @@ Battle assets: message banks and fonts `fight` and `tool_fight`, camera `cam_par
 The 17 `t_vs_*` textures are pre-rendered 2D character pictures, placed as menu items (the common data table near
 0x802E6428: screen position, texture id 0x100C1200-0x101C1200, item number 0x330-0x33E / 0x9F). The title shows one
 set at a time: the page counter `lbl_80478878` (0-3) goes up by one each time the title screen starts
-(`fn_8002049C`), and `fn_8001F304` shows only that page's items (menus.md (not yet published), "The title screen's art").
+(`titleInit`), and `fn_8001F304` shows only that page's items (menus.md (not yet published), "The title screen's art").
 The counter starts at 3, so the first title after power-on shows page 0 (main.dol's initial value, and a fresh boot
 in Dolphin). Not random, not save-dependent.
 

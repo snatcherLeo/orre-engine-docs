@@ -11,7 +11,7 @@ in story flags and variables (flags.md (not yet published)). **Verified** from t
 | Trigger | How it fires | Runs | Details |
 |---|---|---|---|
 | **Entering a room** | the room loads | the room's C pre / main / post functions and its five script slots: +0x28 in its own thread (music), +0x2C synchronously (who is shown), +0x30 / +0x34 / +0x38 on entry / every frame / on leaving | new-game-flow.md steps 6-7 |
-| **The room's main loop** | every pass of its +0x34 script, which also calls `heroMoveMain` | position boxes and flag checks in the script start scenes and battles (Outskirt Stand: the arrival scene, then Willie) | new-game-flow.md step 7; player-movement.md |
+| **The room's main loop** | every pass of its +0x34 script, which also calls `heroMoveMain()` | position boxes and flag checks in the script start scenes and battles (Outskirt Stand: the arrival scene, then Willie) | new-game-flow.md step 7; player-movement.md |
 | **Walking through a plane** | collision walk-through plane -> event id -> hero-event table (kind 1) | usually the common script's **exit** (function 4: target room, entry point, sound) | collision.md, common-script.md |
 | **Door planes** | hero-event kind 2 | the common script's **door** function (5): opens the door object (flags, collision, animation); the exit plane behind it warps | common-script.md |
 | **Examining** (A on a plane) | collision examine plane -> hero-event kind 3 | e.g. a **sign** (common function 11) or a room function | npcs.md ("Choosing who to talk to": planes are the fallback) |

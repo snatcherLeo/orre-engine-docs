@@ -20,7 +20,7 @@ reveals, admin exits) is **rendered in-engine** by scripts, not video.
 | `movie/tpc.thp` | 1.9 MB | 75 | 29.97 | 0:02.5 | `movieTpcStart` (room 0x399 `pokemon_logo`, boot) |
 | `movie/openingdemo.thp` | 61.1 MB | 1926 | 29.97 | 1:04.3 | `movieOpeningStart` (new game / intro) |
 | `movie/autodemo01.thp` | 96.8 MB | 2700 | 29.97 | 1:30.1 | `movieStartAttract` (title-screen idle demo, BGM 0x494) |
-| `movie/staffroll.thp` | 104.1 MB | 5250 | 29.97 | 2:55.2 | `fn_80035F64` / `staffrollStart` (0x800361C0) (credits) |
+| `movie/staffroll.thp` | 104.1 MB | 5250 | 29.97 | 2:55.2 | `movieStaffrollMain` / `staffrollStart` (0x800361C0) (credits) |
 
 Five files, about 266 MB together, the bulk of the disc's size budget for video. The two logos are
 played by their rooms' start functions (**verified**, new-game-flow.md, "Boot").
@@ -36,9 +36,9 @@ through MusyX at the same moment it opens the video (`std104_soundSetBackgroundM
 |---|---|---|---|---|
 | `gs_logo` | **none** (video only) | **0x4D1** | none seen | `movieGsLogoStart` |
 | `tpc` | **yes**: 2 ch, 32 kHz, 80,152 samples (2.5 s) | none | none seen | `movieTpcStart` (opens with loop = 1) |
-| `openingdemo` | **yes**: 2 ch, 32 kHz, 2,058,287 samples (64.3 s) | **0x495** | yes: 5 cues (`lbl_802E51A8`, `fn_80035E04`) | `movieOpeningStart` |
-| `autodemo01` | **none** (video only) | **0x494** | none seen | `movieStartAttract` |
-| `staffroll` | **none** (video only) | **0x4C9** | probably the 33-cue table `lbl_802E50E0` (`fn_80036240`, which follows the staff-roll start in the file; to confirm) | `staffrollStart` (0x800361C0) (wait / post-game handling in `fn_80035F64`) |
+| `openingdemo` | **yes**: 2 ch, 32 kHz, 2,058,287 samples (64.3 s) | **0x495** | yes: 5 cues (`lbl_802E51A8`, `movieOpeningPlay`) | `movieOpeningStart` |
+| `autodemo01` | **none** (video only) | **0x494** | yes: the 33-cue table `lbl_802E50E0` (`moviePlayAttract`, **verified**, Flow below) | `movieStartAttract` |
+| `staffroll` | **none** (video only) | **0x4C9** | none: the credits loop steps no cue table (**verified**, Flow below) | `staffrollStart` (0x800361C0) (wait / post-game handling in `movieStaffrollMain`) |
 
 So **the game plays most of a video's sound itself**: three videos are silent files whose music is a MusyX song, and
 even the opening's file audio is only one layer (measured: quiet, well under the song) under
@@ -56,7 +56,7 @@ effects mixed in at their frames; a port remake must start the same song and cue
    different model and camera animation (shadow-system.md). It starts song `end_ev_2_song`, then **sets flag 1143**
    and **links to room 0x39F, `staffroll`**.
 2. **The staff-roll room** opens `staffroll.thp` and starts song 0x4C9 (`staffrollStart` (0x800361C0)), then waits until the video
-   ends (`fn_80035F64`).
+   ends (`movieStaffrollMain`).
 3. **After the roll**, if the previous room was 118 and flag 1142 is set (set during the final battle's steps), the
    game **sets flag 1144** (the "game cleared" flag the postgame and the Ho-Oh gift check), marks the clear in the save
    data and **asks to save** until the player declines or the save succeeds. A replay from another room skips this.
@@ -75,26 +75,43 @@ movie room's return to Phenac with its flag and save step (code: a hook point fo
 - **Sound goes through MusyX** (*verified*): the sound mixer calls the movie's stream callback
   (`StreamUpdateCallback`, `fn_801E260C`) from the audio interrupt; it hands used buffers back to the decoder with a
   message, which wakes the decoder.
+- **A movie's pace follows its sound** .
+  - **Seen** (verified by hand on the PC port): with the game sped up and the port's "Music and sound" at normal
+    speed, movies still play at normal speed; set to follow the game speed, the movies speed up with it.
+  - **Why** (**verified** from the code, below): the movie's decoders are fed by
+    the sound mixer's stream callback, so the movie's clock is the mixer's, not the game's frame count.
+  - **What it means:** anything paced by a sound stream keeps real time unless the sound itself speeds up. Worth
+    knowing for other sound-paced scenes, and for a speed or skip feature for movies.
+  - The "why" is now **verified** from the code, and it explains the two boot logos: the Pokémon
+    logo (`tpc.thp`) and `openingdemo.thp` have audio tracks and follow the sound's clock; the Genius Sonority logo
+    (`gs_logo.thp`) has none and follows the screen's refreshes, so only it speeds up with the game. Which clock the other
+    two silent videos follow (the attract demo and the credits) isn't checked yet. Movies are one
+    case of a wider pattern: the game waits on its sounds in many places (music.md (not yet published), "The game waits for its
+    sounds").
 - (*likely*) The game asks to open `tpc.thp` again while the previous movie is still open; the open is refused ("Fail
   to open the thp file") and nothing else happens.
 
 ## Data structures
 
 - **Sound cue table** `lbl_802E50E0`: 0x21 entries of 6 bytes `{u16 frame, u16 sound A, u16 sound B}`,
-  used by `fn_80036240`. When the movie's current frame reaches an entry's frame, both sounds (if
+  used by `moviePlayAttract`. When the movie's current frame reaches an entry's frame, both sounds (if
   nonzero) are started with `soundStartSE` and the cursor moves to the next entry. So sound effects are
   **not** baked into the video's audio track; the game fires them on frame numbers.
 
 ## Flow
 
-Every movie function has the same shape (`fn_80035E04`, `fn_80036240`, `fn_80035F64`):
+The three movie
+functions (`movieOpeningPlay`, `moviePlayAttract`, `movieStaffrollMain`) share the same outline:
 1. `GSmovieOpen(path, loop)` (THPPlayerOpen + play).
-2. Loop while `GSmovieIsActive` returns "playing", yielding with `_threadSwitch` each frame (the
+2. Loop while `GSmovieIsActive()` returns "playing", yielding with `_threadSwitch()` each frame (the
    movie runs inside a cooperative GS thread, see the script VM / thread notes).
-3. Each frame: skip if the game is in states 0xB / 0x5 (`fn_8017B1AC`, probably paused or a system
-   dialog); read the pad (`GSinputButtonsChanged(1) & fn_800F7BC4(1)` (0x800F7AF0))
-   and stop the movie (`GSmovieClose`) if A, B or Start (0x100 | 0x200 | 0x1000 = 0x1300) is pressed;
-   otherwise step the sound cue table.
+3. Each frame, step the sound cue table. **Only the attract demo (the trailer the title screen plays when left alone)
+   can be skipped** (**verified**, code): it also pauses while the game is in states 0xB / 0x5 (`fn_8017B1AC`,
+   probably paused or a system dialog), reads the pad (`GSinputButtonsChanged(1) & fn_800F7BC4(1)`
+   (0x800F7AF0)) and stops the movie (`GSmovieClose`) if A, B
+   or Start (0x100 | 0x200 | 0x1000 = 0x1300) is pressed. **The opening (Wes escaping the Snagem Hideout) and the
+   ending credits read no buttons at all**, so they always play to the end (**verified**, code; matches play on the
+   console). The credits loop doesn't even step a sound cue table: it only waits for the movie to end.
 4. After the movie: play a sound, go to the next room and set a fade script. The opening goes to room 1, Outskirt
    Stand (`floorLink(1, 0)`); the attract demo and the Genius Sonority logo go to room 0x384, the title (**verified**,
    table below).
@@ -169,9 +186,9 @@ An in-engine remake of a video would slot in where the original plays. What a re
 
 | Video | Story point | Code that plays it | What happens after | Remake notes |
 |---|---|---|---|---|
-| `openingdemo` | new game: the opening cinematic (Wes blows up the Team Snagem hideout and steals the Snag Machine) | `movieOpeningStart` | a sound, then `floorLink(1, 0)` = `S1_out`, Outskirt Stand, entry 0 (in `fn_80035E04`; room 0x384 is `title`) and a fade script | frame-keyed sound cues (`lbl_802E50E0`) must become timeline events; skippable with A / B / Start |
-| `autodemo01` | title screen left idle (attract demo): started when the **title song 0x46A stops playing** (`fn_8001EF78` / `fn_800203B4` link room 0x39C `auto_demo`; new-game-flow.md step 3) | `movieStartAttract` | back to the title (to confirm) | plays with BGM 0x494 instead of its own audio (to confirm) |
-| `staffroll` | credits after the ending | `fn_80035F64` / `staffrollStart` (0x800361C0) | to confirm | 2:55 of footage; the longest remake |
+| `openingdemo` | new game: the opening cinematic (Wes blows up the Team Snagem hideout and steals the Snag Machine) | `movieOpeningStart` | a sound, then `floorLink(1, 0)` = `S1_out`, Outskirt Stand, entry 0 (in `movieOpeningPlay`; room 0x384 is `title`) and a fade script | its five frame-keyed sound cues (`lbl_802E51A8`) must become timeline events; not skippable (it reads no buttons, Flow above) |
+| `autodemo01` | title screen left idle (attract demo): started when the **title song 0x46A stops playing** (`fn_8001EF78` / `titleMain` link room 0x39C `auto_demo`; new-game-flow.md step 3) | `movieStartAttract` | back to the title (to confirm) | plays with BGM 0x494 instead of its own audio (to confirm) |
+| `staffroll` | credits after the ending | `movieStaffrollMain` / `staffrollStart` (0x800361C0) | to confirm | 2:55 of footage; the longest remake |
 | `gs_logo`, `tpc` | boot logos | `movieGsLogoStart` / `movieTpcStart` (rooms 0x39A / 0x399) | the next boot room; the Genius Sonority logo goes to the title (0x384) | no characters; remake optional |
 
 **Hook point:** each player function opens the movie (`GSmovieOpen`), loops on `GSmovieIsActive`

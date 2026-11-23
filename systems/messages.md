@@ -16,7 +16,7 @@ and stores it with `msgctrlSetValue(slot, value)` before the message box prints 
 
 - **Message key:** `key >> 20` is the bank (group) id, `key & 0xFFFFF` is the entry id inside the
   bank (`GSmsgGetGSchar`, `src/game/gs_msg.c`, 0x800FA280). Key 0 means "no text" and returns NULL.
-- **Message manager** `lbl_80478B08` (a pointer; the name is only descriptive): `+0x08` is the head of a linked
+- **Message manager** `_pMw` (a pointer; the name is only descriptive): `+0x08` is the head of a linked
   list of loaded banks.
 - **Bank** (in memory, as loaded): `+0x00` u16 bank id, `+0x04` u16 entry count, `+0x08` next bank,
   `+0x10` an array of `count` 8-byte entries `{u32 entry id, u32 byte offset}` **sorted by id**.
@@ -27,7 +27,10 @@ and stores it with `msgctrlSetValue(slot, value)` before the message box prints 
   dispatches on the slot through an 81-case jump table (`jumptable_80363630`), so there are up to
   81 slot kinds. Slot meanings are read from the call sites, not yet from the printer.
 - **What a slot holds (2026-10-15, from `msgctrlSetValue`'s definition and 317 call sites):** each slot id maps to
-  one global (`lbl_8047ADC8` .. `lbl_8047AEA4`, about 70). Some store a **number** as a u16 (item / move ids: `0x2D`,
+  one global (0x8047ADC8 .. 0x8047AEA4, about 70; 37 of them now carry the developers'
+  names, from XD's map, matched through their getters, e.g. slot `0x0F` `_ATTACK_MONS`, `0x10` `_DEFENCE_MONS`,
+  `0x23` `_TRAINER_NAME`, `0x28` `_WAZA_NAME`, `0x29` `_ITEM_NAME`, `0x32` `_Pokemon`, `0x4D` `_String`,
+  `0x5D` `_SndID`; **verified** that each name sits in the slot whose getter has the matching name). Some store a **number** as a u16 (item / move ids: `0x2D`,
   `0x2E`, `0x39`, `0x4E`, `0x58`, `0x59`, `0x5D`), the rest a full **32-bit value that is often a pointer to a string**
   (nicknames `0x32`, the strings `msgctrlString` / `msgctrlString2` print through `0x4D` / `0x57`, `GSmsgGetGSchar`
   results through `0x37`). One getter per slot reads it back (`msgctrlPokemon` returns `0x32`'s, `msgctrlEvStrBuf0`
@@ -49,7 +52,7 @@ and stores it with `msgctrlSetValue(slot, value)` before the message box prints 
 ### String encoding
 
 - Strings are sequences of **16-bit code units**, terminated by **0x0000**. `_msgGetLength` computes
-  `(byteSize + 1; >> 1) - 1`, i.e. characters = bytes / 2 minus the terminator.
+  `((byteSize + 1) >> 1) - 1`, i.e. characters = bytes / 2 minus the terminator.
 - **0xFFFF is an escape:** the next byte is a **control code**. Control codes index a table at
   message manager +0x28 (8-byte entries: a flags byte, then a handler function at +4). Flag bits 3 and
   4 say whether the code applies when measuring vs drawing; bits 6-7 say what the handler's result
@@ -93,8 +96,8 @@ the game's own (verified)**; the meanings below follow from those names and are 
 | Code | Handler (`msgctrl*`) | Meaning |
 |---|---|---|
 | 0x00, 0x01 | `CR` | line break |
-| 0x02 | `KeyEnd` | end of a text box: wait for the button |
-| 0x03 | `KeyWait` | wait for the button |
+| 0x02 | `KeyEnd` | wait for the button at the message's end, with no arrow and no new box (**verified** from `msgctrlKeyEnd`: it holds the text until the press, and nothing else) |
+| 0x03 | `KeyWait` | wait for the button with the bouncing arrow, then **start a fresh box**: on the press the page start moves to this point, and the next box draws from the top. The writers put it between boxes, with no line break after it (**verified** from `msgctrlKeyWait` and the text banks) |
 | 0x04, 0x05, 0x06 | `RubyStart`, `RubyTop`, `RubyEnd` | furigana (a reading over kanji) in Japanese text |
 | 0x07 | `Font` | font switch (**verified**, [fonts.md](../engine/fonts.md)) |
 | 0x08, 0x38 | `Color`, `Palette` | text colour, colour palette. (**verified** from `msgctrlColor`): `Color` is followed by **4 bytes**, the colour as R, G, B, A in the text's big-endian byte order; `Palette` takes **1 byte**, an index into a palette table. So these codes are 6 and 3 bytes long with their arguments, and a reader that takes the colour as a native 32-bit value on a little-endian machine gets the bytes reversed (wrong colours on gender symbols and coloured words) |
@@ -240,6 +243,19 @@ separately when a language needs new glyphs ("Translations" above).
   search will miss them.
 - A mod that adds a whole bank only needs to link it into the manager's list.
 - Placeholder slots are a fixed set (81-way switch); new slot kinds need code.
+- **Lines are laid out by the writer, never by the game (2026-11-14).** Every line break (0x00) and every new box
+  (0x03) is in the text. The game never compares a line's width with its box (**likely**: no width test in the draw
+  pass, and the message task isn't even told its box's width; **verified** for the measuring walk and the line-break
+  handler). So a longer name, a translation or an edited line can run past the box's right edge. A line's width is the
+  sum of its characters' widths: half the font's cell for a space, the glyph's width byte for a letter, the cell plus 2
+  for a missing glyph, each times the message's scale. The line step is the cell height plus the font's spacing (11 px
+  for font 0, so 33 px a line), times the scale.
+  - **Box sizes** (the message windows' text items, verified from `main.dol`): 535 x 121 for the field and general
+    windows, 462 x 114 for NPC events, 535 x 88 for the system box; the battle window sizes itself to its message.
+  - **Re-wrapping:** a port or tool that re-wraps has to measure with these rules, inserts included. The measuring walk
+    `GSmsgGetRect` is the model: it runs each control's "measure" side, so nothing waits or sounds.
+  - Inserts are filled in while the text draws (a three-deep stack of string pointers), so their width is known only
+    once the inserted string is.
 - **Banks and fonts are linked in place (2026-10-15, verified from the code):** opening a bank (`GSmsgOpen`) or a font
   file (`GSmsgFontOpen`) writes the list links (`next` / `previous`, header words +0x08 / +0x0C) into the loaded file
   itself; no separate list nodes are allocated. A font file is a chain of fonts, each starting with its header ([fonts.md](../engine/fonts.md)); the
@@ -257,7 +273,8 @@ separately when a language needs new glyphs ("Translations" above).
   in the unused slots (bold, highlight; mod text only), a name-case setting at insertion time, and the dialogue sound
   per character.
 - **Fixed-size limits:** 81 placeholder kinds; the control-code table's slots; text window sizes (line breaks were
-  tuned to the original widths).
+  tuned to the original widths, by hand; nothing re-wraps a line that grows: see "Lines are laid out by the writer"
+  above).
 - **Must stay vanilla in GameCube-accurate mode:** every message, the original fonts and widths, typing speed and
   sounds.
 

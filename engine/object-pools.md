@@ -21,9 +21,9 @@ means clearing the in-use flag.
 | Pool | Array / count | Slot size | In-use flag | Created by |
 |---|---|---|---|---|
 | Materials | `lbl_8047AB1C` / `lbl_8047AB20` | 0x40 | byte 0 | GSmaterialCreate |
-| Lights | `lbl_8047AAEC` / `lbl_8047AAF0` | 0x74 | byte 0 | GSlightLoad |
+| Lights | `_lightStructList` / `_lightStructCount` | 0x74 | byte 0 | GSlightLoad |
 | Cameras | `lbl_8047AA6C` / `lbl_8047AA70` | 0x128 | byte 0 | `GScameraCreateFromDesc` (0x800D27FC) (from a desc), `GScameraCreate` (0x800D29A0) (defaults) |
-| gapp tasks | `lbl_8047AC7C` / `lbl_8047AC80` + `lbl_8047AC84` | 0x18 | word at +0x08 (state) | GSgappCreate |
+| gapp tasks | `_gappStructList` / `lbl_8047AC80` + `lbl_8047AC84` | 0x18 | word at +0x08 (state) | GSgappCreate |
 | Resource registry | see [resources.md](resources.md) | 0x14 | data pointer at +0x04 | GSresRegister/Alloc |
 | Floor requests | see floor-resources.md (not yet published) | 0x24 | word at +0x08 | six request functions |
 
@@ -39,7 +39,7 @@ Known slot fields:
 - **gapp task:** +0x00/+0x04 prev/next, +0x08 state, +0x0C priority (u8), +0x0D flag,
   +0x10 parameter, +0x14 function. Tasks in state 2 come from a second pool placed after the
   first and are pushed onto a separate list (`lbl_8047AC9C`) with interrupts disabled. Other
-  tasks are inserted by priority into the main list (`lbl_8047AC98`).
+  tasks are inserted by priority into the main list (`_gappListTop`).
 
 ## Flow
 

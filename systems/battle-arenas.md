@@ -4,8 +4,8 @@
 
 Status: **partial** (2026-10-14). Every Colosseum and battle area, which room it is, and which
 battles use it. Read from two tables in `common_rel` (game-data-tables.md (not yet published)):
-the **battle-floor table** (`lbl_80478F4C`, 50 entries of 24 bytes, `fightFloorDataBiosGetPtr`)
-and the **battle table** (`lbl_80478F54`, 566 entries of 56 bytes, `fightEncountDataBiosGetPtr`).
+the **battle-floor table** (`fight_floor_data`, 50 entries of 24 bytes, `fightFloorDataBiosGetPtr`)
+and the **battle table** (`fight_encount_data`, 566 entries of 56 bytes, `fightEncountDataBiosGetPtr`).
 Layout and links are read from the USA data; field names are descriptive labels, and what a field does is stated only
 where it is marked.
 
@@ -30,7 +30,7 @@ This also settles what `_bf` means in archive names: the battle-field version of
 | +0x08 | u32 **introduction sequence (shōkai) WZX id** | `fightFloorDataBiosGetSyoukaiWzxDataId` (verified). Set only for the Colosseums and arena 6 (0x89-0x8F), i.e. the stages with an intro scene |
 | +0x0C | u32 | **music sound id** for battles on this arena (0 = none; e.g. 24 = `battle2_song`, 981 = `battle6_song`); `fightFloorDataBiosGetBgmSndId`, music.md (not yet published) |
 | +0x10 | u32 **ambient (environment) sound id** | `fightFloorDataBiosGetEnvSndId` (verified). One per Colosseum (0x3D6-0x3DB) |
-| +0x14 | 2 x u16 **battle-side data ids** (side 0, side 1) | `fightFloorDataBiosGetFightSideDataId(arena, side)` (verified); always 2 / 1, into the 5-entry battle-side table (`lbl_80478F3C`, 20 bytes each; contents open) |
+| +0x14 | 2 x u16 **battle-side data ids** (side 0, side 1) | `fightFloorDataBiosGetFightSideDataId(arena, side)` (verified); always 2 / 1, into the 5-entry battle-side table (`fight_side_data`, 20 bytes each; contents open) |
 
 **Battle entry (56 bytes)** (**verified** from the typed record `FightEncountData` in `fight.c` and its accessors): +0x00
 u8 **battle kind** (the 19 kinds and their rules are named in battle-engine.md, "The 19 battle kinds"), +0x01 u8 "trainer" flag, +0x02 u8 whole-team-fainted (*zenmetu*) flag, +0x04 u16 arena,
@@ -60,6 +60,10 @@ loaded as the stage. Colosseum battles add the per-Colosseum values (+0x08, +0x1
   stages) with new name messages, plus T1.
   This fits T1: a stand-alone Colosseum used only as a selectable stage, which is why it sits in no
   town (`fsys-catalog.md`, T1).
+  (**verified** from Battle Mode's battle setup, battle-mode.md) Arenas 40-48 are **Battle
+  Mode's stages**. Its courses use 43 (Phenac), 44 (Pyrite), 45 (The Under), 48 (Orre Colosseum, both its Lv50 and
+  Lv100 courses), 47 (Realgam Tower); Battle Mode's Mt. Battle uses 40, 41 and 42 as the wins rise and 46 for the
+  100th battle. So **T1 (arena 48) is Orre Colosseum**.
 - **Mt. Battle** (arenas 24-26: valley, magma, cloud) holds 99 battles of type 8, plus 9 others:
   the 100-trainer challenge (**verified**: battle kind 8 is the Mt. Battle challenge, battle-engine.md).
 - Pyrite's Colosseum (arenas 0-4) carries the early tutorial and special battle types.
@@ -76,7 +80,7 @@ loaded as the stage. Colosseum battles add the per-Colosseum values (+0x08, +0x1
 - **Sound:** battle music (+0x0C, unless the battle or trainer class overrides it: `music.md` (not yet published)) and ambient sound (+0x10).
 - **Terrain id** (+0x00): selects terrain-dependent move effects. Traced, see
   "Terrain" below (Secret Power, Nature Power, Camouflage; **verified**).
-- **Battle-side records (decoded 2026-10-14 night):** the table (`lbl_80478F3C`, 5 x 20 bytes; common_rel section-4
+- **Battle-side records (decoded 2026-10-14 night):** the table (`fight_side_data`, 5 x 20 bytes; common_rel section-4
   offset 0x8F910, count at 0x14A688) holds, per side: +0x00 u16 **Y rotation** (`fightSideDataBiosGetYrot`; 0 or 1
   in the data), +0x04 / +0x08 the two **trainer status-window**
   menu ids (`GetFightTrainerStatusMenuDataId`: 243 / 244 or 241 / 242), +0x0C / +0x10 the two **Pokémon status-window**
@@ -90,7 +94,7 @@ loaded as the stage. Colosseum battles add the per-Colosseum values (+0x08, +0x1
 
 ## Terrain (*tikei*; **verified** from code and the executable's data)
 
-The terrain table (`lbl_80363C00`, 12-byte entries, ids 0-8 plus an end entry; bound `lbl_80478BA0` = 9) gives each
+The terrain table (`tikei_data`, 12-byte entries, ids 0-8 plus an end entry; bound `tikei_data_number` = 9) gives each
 terrain three things, read by `tikeiDataBiosGet*`:
 - a **type** (+0x00, `GetZokuseiDataId`): what **Camouflage** turns the user into;
 - a **secondary effect** (+0x02, `GetFightKoukaId`): what **Secret Power** may inflict (Gen 3's move-effect ids:
@@ -158,7 +162,7 @@ copy per room: map-object animations and door / elevator controls).
 
 ## Who stands where, and the idle camera (**verified** by running the game's own code natively, with frame dumps)
 - **The battle grid** places the participants: `battleGridAddTrainer(record, side, depth)` and
-  `battleGridAddPokemon(trainer record, Pokémon record)` add them, `battleGridUpdate` positions them. Each grid member
+  `battleGridAddPokemon(trainer record, Pokémon record)` add them, `battleGridUpdate()` positions them. Each grid member
   is a 0x8C-byte battle sequence record (its facing byte at +0x76; moving the record moves its model). Trainer battle
   models are PKX files like the Pokémon's.
 - **A single battle's layout**: trainers at x = ±65 and their Pokémon at ±40, the two sides turned to face each other
@@ -166,7 +170,7 @@ copy per room: map-object animations and door / elevator controls).
   (`battleGridGetMaxPokemonField` reads each record's class word at +0x10), so big Pokémon push everyone apart.
 - **The idle camera**: while the battle waits for commands, `battle_main` calls `battleCameraStartRandom` every frame;
   about every 200 frames it picks a random grid member (never the same one twice in a row) and starts a camera move
-  on it (`fn_801D2C74`): a close-up of one Pokémon, then the trainer behind it, then another Pokémon with its trainer.
+  on it (`battleCameraStartOwner`): a close-up of one Pokémon, then the trainer behind it, then another Pokémon with its trainer.
   The 200 counts **screen refreshes**, not game frames (about 3.3 seconds), and
   half the expiries skip the pick; the full camera system, with its random draws, is [battle-camera.md](battle-camera.md).
 - **Moves**: each move's effect-type function (`fight_waza.c`) loads and plays the move animation's halves in order,
@@ -183,5 +187,3 @@ copy per room: map-object animations and door / elevator controls).
 
 ## Open questions
 
-- Which code reads the arena for the menu battle modes, to confirm that arenas 40-48 are their
-  stages and which Colosseum T1 is.

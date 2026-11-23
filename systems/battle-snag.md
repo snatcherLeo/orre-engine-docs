@@ -54,6 +54,15 @@ is **not a Shadow Pokémon** the throw is refused before any ball is used: Rui s
 0x7716) until story flag 0x99F is set, and afterwards that it is not a Shadow Pokémon (0x7702); then the menu returns
 to the target choice. The thrown ball and the "threw a Snag Ball" message (0x7703) only follow for a Shadow Pokémon.
 
+**When there's no room** (**verified** from the code of `itemFieldUseBall`): choosing a ball from
+the bag in battle first counts the party. With six Pokémon, it walks every PC box (`pcboxGetNbPokemonBox`, then
+`pcboxGetPokemonBoxNbEmptySlot` per box) and stops at the first box with an empty slot. If none has one, the game shows
+"The BOX is full. You can't Snag any more POKéMON." (message 0x4416) and the ball isn't used. So a snag is refused
+only when the party **and** every box are full; the box count comes from a function, which is where a mod that adds
+boxes would hook in. The same function then refuses a second ball in one turn with the bag's own copy of the
+"charging" message (0x426D). The
+battle text also holds a "The BOX is full! You can't catch any more!" line (0x76AC), whose caller wasn't found.
+
 The text has a "Snag Machine is charging after use" message (0x7715), but no code loads that message id (searched in
 the target assembly of `main.dol` and the RELs): a cool-down rule that is **likely unused** in the final game.
 

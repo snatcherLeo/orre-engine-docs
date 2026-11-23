@@ -74,7 +74,7 @@ mode never changes your saved party (**verified** from the battle-kind table). T
 read at that point too, but nothing is done with the value: **Pokérus never spreads** in Colosseum (**verified**:
 the only writers of a Pokémon's Pokérus value are Pokémon creation (0), the debug menu's Pokémon editor and the
 import of a Pokémon from a GBA game, `gba_misc.c`; so the only way to have Pokérus is to bring it from a GBA game).
-When `fn_8006B57C` is 1 the trainers'
+When `fn_8006B57C()` is 1 the trainers'
 Pokémon are put back into their parties (`fightTrainerBackFightPokemonToTemotiPokemon`).
 
 ## Disc data

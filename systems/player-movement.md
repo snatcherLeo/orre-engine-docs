@@ -9,14 +9,14 @@ units (the floor is in the same units as collision, collision.md).
 
 ## What it does
 
-There is no separate "player object" loop: every room's **main-loop script** calls `heroMoveMain` once per pass
+There is no separate "player object" loop: every room's **main-loop script** calls `heroMoveMain()` once per pass
 (room record +0x34; new-game-flow.md step 7). Each call reads the controller, moves the party leader, lets the
 partner follow, counts footsteps (field-steps.md), and runs any event the movement triggered. A script that wants
-the player to stand still for a cutscene brackets it with `heroMoveInitEvent` / `heroMoveTermEvent`.
+the player to stand still for a cutscene brackets it with `heroMoveInitEvent()` / `heroMoveTermEvent()`.
 
 ## Data structures
 
-**The move work** (`lbl_80426BD0`, one block, proposed `gHeroMove`; fields named in the decomp's struct):
+**The move work** (`HeroMove`, one block, proposed `gHeroMove`; fields named in the decomp's struct):
 - up to **two members** (the player and the partner), each with a following-distance value and a timer; which one
   leads (`leader`);
 - the **leader's trail**: a ring of **20 positions**, a new one recorded whenever the leader has moved more than
@@ -45,7 +45,26 @@ the player to stand still for a cutscene brackets it with `heroMoveInitEvent` / 
      counts as a full tilt). The tilt is clamped to ±56 per axis, and the **speed is the tilt's length / 28, up to
      2.0**: a light push walks, a full push goes at double speed (**verified** numbers; the walk / run animation
      split is in the character code, `peopleAmountFromMove`). The direction is taken **relative to the camera's
-     yaw** (`cameraGetRotY` + the stick angle), so "up" always means away from the camera. (The camera itself: field-camera.md.)
+     yaw** (`cameraGetRotY()` + the stick angle), so "up" always means away from the camera. (The camera itself: field-camera.md.)
+     (**verified**): The function reads the main stick twice, smoothed (for speed and direction)
+     and unsmoothed but clamped (only to decide whether the facing changes: a tilt below 2 keeps the current facing).
+     An amount up to 1.0 walks (below 0.4 slower than a walk), 1.0 to 2.0 blends from walking to running speed
+     (**likely**, from the character code's speed ramp, not checked against a recording).
+     **The C-stick plays no part in walking**: the field camera reads no stick at all, so in normal play the C-stick
+     does nothing while the hero walks. The game reads the C-stick only in the battle menu (its angle picks an entry),
+     the P★DA's model page (it spins the model) and three debug tools (two debug cameras and the move viewer). The
+     input code also clamps the C-stick to a smaller circle (44) than the main stick (56).
+     **A second copy of this reading** (**verified**): `fn_80186B5C` (`people.c`) reads the same
+     values and the d-pad the same way to predict the hero's step for the script command 170, which tests whether that
+     step crosses a line and, if asked, pushes the hero back and locks his movement (rooms use it for spots the hero
+     must not walk past). Anything that changes how the stick moves the hero has to change both.
+     (**verified** by measurement in a test build that feeds the C-stick's values into both readers):
+     The C-stick's stored values use **the same sign convention as the main stick** (a push up is negative after the
+     input code's flip, as for the main stick), so its values can stand in for the main stick's as they are; only the
+     range differs. Scaled by 56 / 44, a full C-stick push moves the hero as fast as a full main-stick push (23.4
+     against 23.0 units over the same frames from the same spot; the small gap is the smoothing filter's lag). Because
+     the C-stick's circle (44) is reached at about half its travel, a partial push walks a little faster than the same
+     push of the main stick (**verified**: a quarter push moved 17.1 units against the main stick's 14.0).
      (**verified**, `input.c`): The input code **flips the sign of the stick's Y** (main stick and
      C-stick) when it stores each reading, so in the game's stored copy "up" is negative. Anything that records or
      replays input must use the same convention (a route recorded with the raw sign walks the wrong way).
@@ -97,6 +116,11 @@ follower is teleported back onto the trail; the full follower logic is on partne
 ## Changing it
 - **Running speed / a run button**: the speed cap (2.0) and the tilt scale (28) are the two numbers; a port option
   could map a button to full speed, since the d-pad already counts as a full tilt.
+- **Walking with the other stick** : the place is right after the two readers above read the main
+  stick and before they try the d-pad; giving both the C-stick's values (scaled to the main stick's circle) while the
+  main stick is centred makes either stick walk, and leaves every other C-stick use (the battle menu, the P★DA, the
+  debug cameras) alone, since those screens never run the walking code. The debug orbit camera (scene mode 5) steers
+  with the C-stick while the hero walks, so a change like this should step aside in that mode.
 - **Talk range**: the two arguments of `peopleFindTalkTarget` (npcs.md).
 - **Partner catch-up**: 100 units / 300 ticks in `partnerMove`.
 - Anything that should happen "when the player walks somewhere" belongs in the room's main-loop script (position

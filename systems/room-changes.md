@@ -22,7 +22,7 @@ decomp's C unless marked.
 Every request also installs the standard **fade scripts** (common script functions 9 and 8, the leaving and
 arriving fades; which is which is **likely** from the argument order, common-script.md). A request made while the room is running stops its script threads first.
 
-## The link record (`lbl_80408378`, proposed `gFloorLink`)
+## The link record (`_floorChangeInfo`, proposed `gFloorLink`)
 
 | Offset | Field |
 |---|---|

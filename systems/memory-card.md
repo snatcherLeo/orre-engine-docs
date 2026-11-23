@@ -9,13 +9,12 @@ from the code unless marked.
 
 ## What it does
 
-A caller asks for a task kind and blocks until it finishes: `fn_801D0748(kind, work size, channel)` (proposed
-`memcardRunTask`) starts the task and yields every frame until the task reports a non-zero result, which it returns.
+A caller asks for a task kind and blocks until it finishes: `memcardExecTask(kind, work size, channel)` starts the task and yields every frame until the task reports a non-zero result, which it returns.
 The task itself is a per-frame state machine (`memcardTaskMain` (0x801CDB04)) run as a GS per-frame task, so the screen keeps drawing
 (dialogs, the memory-card messages) while the card is accessed.
 
 ## Data structures
-**The task state** (`gMemcardTask`, `lbl_8047B3D4`, `MemcardTaskState`): task kind, card channel, work size, result
+**The task state** (`_memcardStatusPtr`, a `MemcardTaskState*`): task kind, card channel, work size, result
 (0 while running), the state machine's state, an error code (which message to show), the player's answer to a dialog,
 a work buffer (0x1E600 bytes) and a card work area (0xA000 bytes) allocated per task, and the per-frame task's id.
 The state block itself sits at a **random 8-byte-aligned offset** chosen once at init (`memcardInit` (0x801D0A30): `CARDInit`, then
@@ -27,8 +26,8 @@ generator, before the logos: part of the random numbers used before the title (r
 | Kind | Called by | Meaning |
 |---|---|---|
 | 1 | the title, after START (`std021_newGameIntroSequence`, state 0xC8) | load the save at boot (new-game-flow.md, step 3) |
-| 2 | Battle Mode menus (two callers: `exDiscCouponMenu` (0x800798E8), `exDiscCheckStorySave` (0x80075C94)) | **read the story save for Battle Mode** (**likely**): the caller goes on only if the result is 3 and the loaded save's **save count** is non-zero, otherwise it shows message 0x44DB (no Story Mode save on the card in slot A; **verified** from the text) and closes the menu. (**likely**: Battle Mode borrows the story save's party) |
-| 3 | after the staff roll (`fn_80035F64`, `movie.c`), the P★DA's save (`pcMenuSave` (0x80038A0C)), each followed by kind 4 | **read the card's save for the overwrite check** (**verified** from both callers): the caller backs up the save in memory, reads the card's save over it with kind 3 and, if the card has a save (save count non-zero), compares hero value 2 of the card's save with the current game's, asks whether to **overwrite the existing save** in slot A (message 0x3C02, **verified** from the text) when they are equal or the current game's save count is 0, restores the backup, then writes with kind 4 |
+| 2 | the bonus-disc and GBA-link event menus, not Battle Mode (two callers: `exDiscCouponMenu` (0x800798E8), `exDiscCheckStorySave` (0x80075C94); both sit with the bonus disc's rooms (`ex_top`, 0x321) and the GBA-link gift menus, menu-rooms.md; **likely**) | **read the story save for those events** (**likely**): the caller goes on only if the result is 3 and the loaded save's **save count** is non-zero, otherwise it shows message 0x44DB (no Story Mode save on the card in slot A; **verified** from the text) and closes the menu. (**likely**: those events need the story save's party or progress) |
+| 3 | after the staff roll (`movieStaffrollMain`, `movie.c`), the P★DA's save (`pcMenuSave` (0x80038A0C)), each followed by kind 4 | **read the card's save for the overwrite check** (**verified** from both callers): the caller backs up the save in memory, reads the card's save over it with kind 3 and, if the card has a save (save count non-zero), compares hero value 2 of the card's save with the current game's, asks whether to **overwrite the existing save** in slot A (message 0x3C02, **verified** from the text) when they are equal or the current game's save count is 0, restores the backup, then writes with kind 4 |
 | 4 | the save menu (`std235_menuShowSaveMenu`, script command 235), the shop's coupon exchange, the P★DA, Battle Mode, GBA conversion, the staff roll | **save** (**verified** by the save-menu caller; result 4 = written) |
 | 5 | Battle Mode, after registering Pokémon (`fn_800889A4` from `menuColosseumBattle.c`) | **save the Battle Mode registration** (**likely**): section 14 is backed up first and restored if the save fails; the no-card path warns that the registered Pokémon will be lost on reset (message 0x3C60, **verified** from the text) |
 | 6 | Battle Mode saves (`fn_80088D84` and the Mt. Battle path, `gba_conv.c`) | **a Battle Mode save written from a temporary save image** (**likely**): the whole save image (0x1DFD0 bytes) is copied aside, slot ids renumbered, section 14 +0x1C and variable 0x8AE cleared, the task run, then the image restored; the Mt. Battle path first records the player's memo, asserting the mode is `BATTLEMODE_BATTLEYAMA100` |
@@ -38,8 +37,8 @@ generator, before the logos: part of the random numbers used before the title (r
 
 (**verified** from the task code's kind switches): Kinds **1, 2, 3 and 8** share the
 header-read path (`memcardBeginHeaderRead`) and the same ending (`memcardEndAccess`), so they are the **read-side**
-tasks (**likely** loads and checks) (kind 8 reads the header first and then writes, see below); kind 4 and the kinds above it take the write paths. Kind 8's caller is the trade menu, which starts it with `fn_801D055C(8, 2, 0)` directly and polls the result itself, rather than
-going through `fn_801D0748`. It is **the trade save** (**verified** from the messages around it: the card in slot A
+tasks (**likely** loads and checks) (kind 8 reads the header first and then writes, see below); kind 4 and the kinds above it take the write paths. Kind 8's caller is the trade menu, which starts it with `memcardStartTask(8, 2, 0)` directly and polls the result itself, rather than
+going through `memcardExecTask`. It is **the trade save** (**verified** from the messages around it: the card in slot A
 and the GBA Game Pak are saved together, and on failure the trade is reported as not saved). While the task runs,
 the trade code sends the GBA its go / stop signal (`fn_801D046C`), and kind 8's write path waits at a resume state
 for it (**likely**). The trade counts as done only on result 4; otherwise the save image is restored from the copy
@@ -66,7 +65,7 @@ Kinds **10 and 11** copy the current save into the work buffer before writing (*
 write-side kinds too (kind 0xB is the debug entry `fn_8000C3A4`).
 
 ## Flow
-1. `fn_801D055C` (proposed `memcardStartTask`): wait for any running task to finish, set kind, channel and work size,
+1. `memcardStartTask`: wait for any running task to finish, set kind, channel and work size,
    clear result, state, error and dialog answer, allocate the two buffers, and create the per-frame task.
 2. *First states* (**verified**, `memcardTaskMain` (0x801CDB04)): state 0 clears the per-task fields and, for
    kind 4 with a save count of 0 (the **first save**), switches the task to **kind 9** (**likely** "create the file");
@@ -76,7 +75,28 @@ write-side kinds too (kind 0xB is the debug entry `fn_8000C3A4`).
    must report "ready" (or a "no card" the game handles) for the title to get through (**likely**).
 3. The per-frame task steps through its states (card checks, dialogs such as "save?" and error messages, reads or
    writes), sets the result when done.
-4. `fn_801D0748` sees the non-zero result, cleans up (`fn_801D039C`) and returns it.
+4. `memcardExecTask` sees the non-zero result, cleans up (`memcardEndTask`) and returns it.
+
+## Efficiency: how long a save takes
+The task never blocks the game: each state starts one asynchronous `CARD*` call and the next state
+polls the card's result once a frame until it stops answering "busy", so the game keeps drawing (the saving message,
+the spinning icon) while the card works. The time is the card's, not the CPU's.
+
+One story save at a PC, timed frame by frame in Dolphin (**likely** close to a console: Dolphin's memory card adds
+transfer delays of its own, not checked against hardware), 60 frames a second:
+
+| Step | Frames | Notes |
+|---|---|---|
+| mount the card | 5 | |
+| read the small file (about 16 KB) | 2 | |
+| the checks and the header reads | under 1 each | never seen busy |
+| **write the save** (about 122 KB, with the erases) | **80** | about 1.6 KB a frame: the longest step by far |
+| the task's own states between them, to the result | about 49 | dialog and bookkeeping states |
+| **the whole save task** | **about 136 (2.3 s)** | from the first card call to the result |
+
+Reads are about five times faster than writes (about 7.9 KB a frame against 1.6 KB). So loading the save at the title
+(about 110 KB) takes about 14 frames, while writing it takes 80. Writes erase each 8 KB block before writing it, and
+that likely accounts for the difference.
 
 ## Changing it
 - For the PC port: replace the card access under the task (the `CARD*` calls) with files; keep the task interface

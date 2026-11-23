@@ -23,7 +23,7 @@ turns them into pointers in place when the room loads.
 | Offset | Field | Evidence |
 |---|---|---|
 | +0x00 | f32[3] translation, f32[3] rotation, f32[3] scale | data: (0,0,0), (0,0,0), (1,1,1) for static objects; copied per object by `fn_8010CD6C`, matrix built by `colsysMakeSRTMatrix` (0x8010CA30) / `colsysMakeRotMatrix` (0x8010C8D0) (order of rotations not identified yet) |
-| +0x24 | group: **floor** | height / layer queries `fn_8010E138`, `GScolsys2WalkGetLayer`; normals face up |
+| +0x24 | group: **floor** | height / layer queries `GScolsys2WalkGetHeight`, `GScolsys2WalkGetLayer`; normals face up |
 | +0x28 | group: **walls for the player and partner** | `colsysWallAll(.., useAlternate 0)` from `colsysWallSweep` (`hero_move.c`, partner code `gs_range_801C766C.c`) |
 | +0x2C | group: **walk-through event triggers** | `colsysPassGetEventID` (`people.c`), `GScolsys2ThruGetEventList` |
 | +0x30 | group: **examine (A button) event planes** | `GScolsys2Check` -> `fn_80111864` |
@@ -52,7 +52,7 @@ two functions find the active floor's copy by offset and test or toggle that bit
 The grid order of +0x14 / +0x1C is from the data (M2_out floor: 12 x 28 cells of 40 starting at its
 minimum corner, covering the floor's extent). The assembly agrees: every grid lookup computes
 `(position - min) / cellSize`, loading the subtracted value from +0x1C/+0x20 and the divisor from
-+0x14/+0x18 (`GScolsys2ThruGetFixedMdlEventList` 0x8011069C, `colsysWallSphere`, `fn_8010E138`).
++0x14/+0x18 (`GScolsys2ThruGetFixedMdlEventList` 0x8011069C, `colsysWallSphere`, `GScolsys2WalkGetHeight`).
 The loader fixes
 up only the triangle pointer for the +0x30 and +0x38 groups (no grid there).
 
@@ -71,14 +71,14 @@ starts 8 bytes after its group's head). Anything that walks the file has to trea
 | +0x31 | u8 attribute B: on walls 2, 3, 4, 6, 7; on floors 0, 1, 17; meaning not identified yet |
 | +0x32 | u16 **event id** of walk-through triggers (one id per trigger object: 4, 5, 6 ... in Pyrite Town). **Examine planes keep their id in the u16 at +0x30 instead** (`fn_80111864` compares +0x30; Pyrite Town: 1, 2, 3, 10) |
 
-The floor-hit record returned by `fn_8010E138` has height, surface type, surface id, layer and
+The floor-hit record returned by `GScolsys2WalkGetHeight` has height, surface type, surface id, layer and
 sub-layer (`ColWalkHit`); `GScolsys2WalkGetLayer` picks the hit closest in height and returns its
-layer and sub-layer. Which triangle bytes feed which field is still to read from `fn_8010E138`.
+layer and sub-layer. Which triangle bytes feed which field is still to read from `GScolsys2WalkGetHeight`.
 
 **checks on the whole disc (*verified*):** the layout above holds for all 124 collision files (1,348 objects,
 2,025 groups): every block lies inside its file, every grid index is a valid triangle, no triangle array is shared
 between group kinds. A port that converts the file to native byte order must swap it field by field (the 16-bit
-fields and the attribute bytes are not 32-bit words). **End to end:** the decompiled floor query (`fn_8010E138`,
+fields and the attribute bytes are not 32-bit words). **End to end:** the decompiled floor query (`GScolsys2WalkGetHeight`,
 `GScolsys2WalkGetLayer`), compiled and run natively, answers 200 random floor-height queries in every room with a
 floor group (122) exactly like an independent re-implementation reading the original big-endian file: 24,400 queries,
 0 mismatches (M2_earth_colo and T1_ancient_colo have no floor group).
@@ -93,7 +93,7 @@ catching the player. *For modders:* floor triangles must face up with the game's
 
 1. Room load: the room archive's type-3 entry is read through the resource table; the post-load
    callback `floorReadColPostFunc` calls `fn_8010CFE4`, which fixes the offsets and makes the file
-   the current collision (state `lbl_80404C68`, layers of 0xDC0 bytes; `GScolsys2GetCurFloor`).
+   the current collision (state `GScolsys2`, layers of 0xDC0 bytes; `GScolsys2GetCurFloor`).
 2. Every frame, movement code asks the collision system: the player (`hero_move.c`) and partner
    test their path against the player walls (`colsysWallSweep`), NPCs (`people.c`) against the NPC
    walls (`GScolsys2HitNpcCollision` (0x8010F188)), and both look up the floor height and layer.

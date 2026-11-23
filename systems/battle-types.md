@@ -21,7 +21,7 @@ or special, its label sprite, its name, and its row of the type chart. The chart
 |---|---|---|
 | +0x00 | u8 **category**: 1 physical, 2 special, 0 neither | `zokuseiDataBiosGetCategory` (0x8010C4A0) |
 | +0x02 | u16 **label sprite** id: the coloured type label the battle menu (`menuFightDrawSecretPokemonStatus`) and the move list / summary (`pokemonToMenuWazaStatus`) draw | `fn_8010C46C` |
-| +0x04 | u32 **name** message (developer-style short names: NORMAL, FIGHT, ..., ELECTR, PSYCHC, ?) | `fn_8010C4D4` |
+| +0x04 | u32 **name** message (developer-style short names: NORMAL, FIGHT, ..., ELECTR, PSYCHC, ?) | `zokuseiDataBiosGetName` |
 | +0x08 | u16[18] **type-chart row**: the result of this type attacking each defending type | `zokuseiDataBiosGetAisyou` (0x8010C508) (`zokuseiGetWazaJoutai`) |
 
 Category on the disc: types 0-8 physical, 10-17 special, "???" 0. So **the physical / special split is data** in
@@ -45,7 +45,7 @@ and handles Foresight in code (battle-engine.md, "Type effectiveness").
 - **Battle Mode badges** (`lbl_802EDB40`, 18 u16 sprite ids 0x2C9-0x2D9): small 23 x 17 two-letter badges from
   texture `menu_047` in `toolbattle_menu.fsys` (entry 0x0CA11200), used only by one Battle Mode menu callback
   (`menuTaisenDrawPokemonStatus` (0x800643D4), four moves). "???" has no badge of its own there and borrows Steel's.
-- **Sprite records** (`lbl_802E7CE8`, 0x18 bytes each): +0x08 x, +0x0A y, +0x0C width, +0x0E height on the sheet,
+- **Sprite records** (`_menu_sprite`, 0x18 bytes each): +0x08 x, +0x0A y, +0x0C width, +0x0E height on the sheet,
   +0x10 the texture's entry id, +0x14 the next sprite.
 
 ### Where type ids appear

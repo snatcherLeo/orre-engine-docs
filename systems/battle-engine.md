@@ -184,6 +184,17 @@ Number of trainers, Pokémon out per side (1 or 2), Pokémon entered per trainer
 An effect id, a target id and a **condition** id (`jouken`); `fightKoukaDoFightKoukaJoukenAndKouka(target, index)`
 checks the condition and applies the effect. This is how item, ability and field effects are expressed as data.
 
+**the condition data** has two tables, read by the `fightJouken...Bios` getters (field names are
+the developers' own, **likely**, strong: XD's demo linker map lists the same getters in the same order, and XD's code
+reads exactly the same offsets with the same signedness):
+- **Condition record** (0x18 bytes): +0x00 `Form` (u8), +0x02 `Link` (u16, the first link record), then two
+  **value entries** of 0x0A bytes each: +0x00 `Kind` (u8), +0x01 `HoseiFlag` (u8, "adjustment" flag), +0x02 `Kake`
+  (s16, "multiply"), +0x04 `Waru` (s16, "divide"), +0x06 `Target` (u16), +0x08 `Buff` (u16).
+- **Link record** (6 bytes): +0x00 `Joint` (u8), +0x02 `JoukenDataId` (u16, a condition), +0x04 `NextLinkDataId`
+  (u16, the next link), so conditions form chains.
+
+`Kake` / `Waru` as a fraction's numerator and denominator is **likely** (the names say multiply and divide).
+
 ## Flow
 
 ### Battle start
@@ -244,7 +255,7 @@ phase are **likely**):
    - **end of turn** (`OneTurnPost`): weather and status damage, timed effects;
    - an optional total battle timer can end the battle (time-out result).
 3. **End** (`Syuuryou`): result messages, EXP and money, the fade-out, then the battle's own clean-up; control
-   returns to the field (`floorSetFadeScript`). `std103_battleGetResult` is how scripts read the outcome.
+   returns to the field (`floorSetFadeScript`). `std103_battleGetResult()` is how scripts read the outcome.
 
 ### Move sequences (`WS_*` commands)
 Every move runs as a script: a byte stream read through a cursor (`lbl_8047B610`), one handler per command
@@ -255,7 +266,7 @@ command advances the cursor by its own length; jump commands load a new cursor f
 flag bytes (`lbl_80478D78`) carry state between commands (which branch was taken, what to report).
 (verified from code and the executable's data) The command table (`lbl_8027A00C`)
 has **255 entries**, one handler per command byte, starting with `WS_HITCHECK` and `fightCheckAccuracy`; the
-interpreter calls `table[*cursor]` until a handler ends the script. The scripts themselves are byte streams in the
+interpreter calls `table[*cursor]()` until a handler ends the script. The scripts themselves are byte streams in the
 executable's data (for example `lbl_80375F98`, `lbl_80377AB8`, `lbl_803798D8`), and a jump stores its 32-bit target
 address right after the command byte, so addresses sit at odd offsets in the stream (the link step relocates them
 there). Operands are big-endian like all GameCube data.
@@ -266,7 +277,7 @@ lead to only a few kinds of place:
 1. **other script bytes**: 197 jump and call targets, all inside the one block of script data;
 2. **about 20 small battle work variables**: the shared flag bytes (`lbl_80478D78` and their neighbours up to
    `0x80478D98`, the small-data ones starting with values the commands read as 16-bit (`0x80478D80`-`D88`) or 32-bit
-   (`D8C`) numbers) and the hit-marker word `lbl_8047B618` with the bytes and halfwords around it (`0x8047B600`-
+   (`D8C`) numbers) and the hit-marker word `ServerStatusFlag` with the bytes and halfwords around it (`0x8047B600`-
    `0x8047B64A`). The status commands (`WS_STATUS_*`) and the set / compare commands read and write these directly
    through the stored address;
 3. **writable data bytes** at `0x8038FF5A`-`0x8038FFFC` (the stat-change value that Growl / Tail Whip set at
@@ -326,7 +337,7 @@ wait), `2E <address> 00` and `2E <address> 08` (set two bytes), `BA <address>` (
 So Genius Sonority ported Game Freak's battle scripts and their interpreter, then added generic read / write
 commands for its own status system. **Consequence (verified for 192 of the 200 lengths checked, likely for semantics):** the Gen 3 disassemblies' command reference (argument
 layouts, what each command does) describes most Colosseum commands, and Colosseum's scripts should read like Ruby /
-Sapphire's `data/battle_scripts_1.s`. The state bits in `lbl_8047B618` match Gen 3's "hit marker" bits where checked
+Sapphire's `data/battle_scripts_1.s`. The state bits in `ServerStatusFlag` match Gen 3's "hit marker" bits where checked
 (0x1000 swap attacker / target), so that word is Colosseum's `gHitMarker` (**likely**). Argument layouts differ in
 two ways: Colosseum stores addresses big-endian (GameCube), Gen 3 little-endian, and the 8 commands listed above
 have different lengths.
@@ -461,7 +472,7 @@ values for these fields are taken to equal Ruby / Sapphire's: **likely**.) Field
 flag bytes (contact, Protect, ...), names and descriptions.
 
 ### Per-move handler table (verified from code)
-Besides its script, every move has a row of five handler addresses in the executable's data (`lbl_8035C430`, 0x14
+Besides its script, every move has a row of five handler addresses in the executable's data (`waza_func_data`, 0x14
 bytes per row, one row per move; the move record's u16 at +0x1C is the row index): +0x00 the trainer AI's **value**
 function, +0x04 the AI's **hit** function, +0x08 the AI's **damage** function, +0x0C the WZX effect **type** function,
 +0x10 the WZX effect **variation** function (accessors `wazaDataBiosGet/SetFightTrainerAiWaza*FuncPtr`,
@@ -486,8 +497,21 @@ small wrappers that only use the first two.
   way, so any move or battle event script can cry (which scripts use it is not traced yet).
 - **Timing:** a cry is started by code when an event begins, not by an animation frame. Move-effect sounds are
   different: WZX sequences start sound resources from their timed nodes (`wazaSequenceEntry.c`).
-- **No pitch or volume tricks found:** every cry call uses the same arguments (pan 0, volume 0xFF). Whether a faint
-  plays a cry, and how (a script command or code), is open.
+- **No pitch or volume tricks found:** every cry call uses the same arguments (pan 0, volume 0xFF). Every cry goes
+  `soundStart` → `soundStartRaw` → `sndFXStartEx`, then a volume control only: there is no pitch bend and no second
+  cry id per species (**verified** for the code read).
+- **The faint plays no species cry in code** (**verified**): a faint is two battle-script commands
+  (`wsCmd1A`, which clears a substitute and starts the faint sequence, and `wsCmd1B`, which waits for it, closes the
+  status box and resets the Pokémon's state; that they are the faint pair is **likely**). The faint sequence
+  (`fightOutPokemonKizetuEffect`, 0x8020912C) never starts a sound or reads a cry: it only runs one move-effect
+  sequence chosen by the Poké Ball's item record (field +0x10; **likely** the ball's `_downin` sequence). *(Added
+  2026-11-19, read from the Poké Ball's file, **verified** from the data; that +0x10 names it stays **likely**:)* it's
+  a part-4 sequence (`itemGetStatus(ball, 0x10)`); `wzx_monsterball_downin` plays on animation slot 10, brings in the
+  ball's models at ticks 143-144 with colour fades and particles on the ball, and ends with a control step that hides
+  the Pokémon at tick 220. Send-out and
+  the Shadow reveal, by contrast, do play the cry. So any sound heard at a faint is either a sound inside the ball's
+  faint sequence (the same for every species, **likely** if it exists), a cry command placed after the faint in the
+  battle scripts (the normal cry, unchanged; not traced), or something in the sound data. A logged faint in a running game settles it.
 
 ### Critical hit (WS_CRITICAL_CHECK, fight_seq.c)
 The critical stage is the sum of: Focus Energy (+2), a high-critical move (+1; move effects 43, 75, 200, 209), Scope
@@ -539,9 +563,23 @@ ranges"). The PP lives on the party Pokémon (status 0x80, per move slot).
 
 ### Secondary-effect chance (`wsCmd15` (0x80224820), Gen 3's "set effect with chance" 0x15; **verified**)
 The chance is the move's effect chance (field 0x0C), **doubled by Serene Grace** (ability 32); roll `random % 100`
-against it, then apply the effect as a secondary effect (`WS_TSUIKA_INDIRECT_ACT`'s path). A menu switch
-(`fn_8000817C`, byte `lbl_8047A271`, 0 at boot, set from a yes / no prompt in the debug menu's battle page, `fn_80007B30`, which sits among the `dbgMenuFight*`
-functions: **likely**) forces the chance to 99: a developer option, off by default.
+against it, then apply the effect as a secondary effect (`WS_TSUIKA_INDIRECT_ACT`'s path). A debug switch forces the
+chance to 99: a developer option, off by default. It is the battle debug menu's "tuika kouka" (added effect) flag,
+read through `dbgMenuFightGetTuikakoukaFlag`, 0 at boot, set from a yes / no prompt on the menu's flag page
+(the flag page matches XD's item by item, which gives the original name: **verified**).
+
+**The battle debug menu's other flags** . The same flag page also holds:
+- the move Metronome is forced to pick (`dbgMenuFightGetYubiwohuruWazaDataId`, edited with the move picker: **likely**);
+- a switch that gates held-item effects (`dbgMenuFightGetSoubikoukaFlag`; it is read right before a held-item
+  check: **verified**);
+- a trainer-AI "decision flow" display (`dbgMenuFightGetFightTrainerAiFlowDispFlag`, read all through the AI code:
+  **likely**);
+- a switch that makes the player choose for every trainer, AI ones included
+  (`dbgMenuFightGetAllFightTrainerOperateFlag`; battle-turn-flow.md: **verified**);
+- switches for an in-battle debug menu and a Pokémon status menu (**likely**, from the names);
+- the message speed, and whether messages wait for a button (**likely**, from the slots XD names).
+
+The code for all of them is still in the retail game.
 
 ### Secondary-effect ids (`fightSeqSetTsuikaKouka` (0x802249B8), behind `WS_TSUIKA_DIRECT_ACT` / `INDIRECT_ACT`)
 The effect to apply is in sequence flag byte 3 (`lbl_80478D78[3]`). Before the main `switch`, a per-effect table
@@ -677,6 +715,51 @@ on the linked pages.
 | Sending in a replacement | choosing: command 0x50 (`wsCmd50` (0x8021F24C), Gen 3's `openpartyscreen`) through `fightTrainerSelectIrekaeFightPokemon` (AI or party menu); sending in: `_fightCheckFaintedFightOutPokemonSub` (0x80222EF0) (battle-turn-flow.md section 8, step 9) | which party member replaces a fainted one, and whether an empty field slot gets it or stays empty | the fainted Pokémon's replacement index (status 0x121) | verified |
 | EXP and prize money | commands 0x23 (`wsCmd23` (0x802232F4)) and 0x5D (`wsCmd5D` (0x8021E754)), battle-rewards.md | who gets EXP and how much; the prize and whether it is pooled | battle-kind rules 0x24-0x27 and 0x2D, the fainted Pokémon, Exp Share, Lucky Egg, Amulet Coin | verified |
 | Losing a battle | `fightStartEncount` (battle-rewards.md, "Losing a battle") | blackout (half the money, healed, back to the return point) or the script decides | the encounter's whole-team-fainted flag | verified |
+
+
+## Colosseum compared with Gen 3 
+
+The data tables are Gen 3's, specifically Ruby / Sapphire's (pokemon-data.md, "Disc data"). The battle code is Gen
+3's too, with Colosseum's own rules wrapped around it.
+
+**The same as Gen 3** (**verified** from the code unless marked): the move-script commands and the move effects
+(0-213); every regular move's data; ability and held-item ids (what each does: **likely** the same); the type chart
+(all 110 non-neutral pairs) and physical or special decided by the move's type; the damage formula and the order of
+its steps (stat changes, power changes, the base damage, burn, screens, weather / Flash Fire / the spread-move half,
++2, the critical hit, same-type bonus and type matchups, Charge, Helping Hand, then the random 85-100 %); critical-hit
+stages and their items, Battle Armor / Shell Armor, a critical hit doubling damage (the stage divisors 16 / 8 / 4 / 3 /
+2: **likely**); spread moves halved in doubles, screens at two thirds in doubles, the coin flip on a speed tie; weather
+lasting 5 turns, a 1-in-5 chance to thaw, sleep and confusion lasting 2-5 turns, the end-of-turn order; the 9
+friendship rules.
+
+**Different in Colosseum:**
+- **Battle rules, only in Battle Mode and Colosseum rule play** (**verified**; battle kinds 13-16 and 18, never story
+  battles): Destiny Bond and Perish Song fail when the user's side has one Pokémon left (unless a rule byte turns that
+  off); a Pokémon that self-destructs (Explosion's effect only, not recoil) **loses** instead of drawing; plus a Skill
+  Swap ban, a Sonic Boom / Dragon Rage ban, a sleep clause and a freeze clause (the freeze clause **likely**). The AI
+  avoids the self-KO move when it's down to one Pokémon.
+- **A double knock-out** is a draw only in a few battle kinds; elsewhere it counts as a loss for the player's side
+  (**verified**).
+- **No badge stat boosts:** Gen 3's badge boost is switched off in every battle kind (**verified**).
+- **Shadow Rush skips type matchups entirely:** no same-type bonus, nothing resists it or is immune (**verified**).
+- **Disable lasts 3-5 turns** (**likely**; Gen 3's own value not checked here).
+- **Critical hits can be switched off per battle kind** (on everywhere but one kind).
+- **No wild battles**, so Smoke Ball and Run Away do nothing (**likely**).
+- **EXP:** base × level / 7, halved by Exp. Share, ×1.5 for a Lucky Egg, a traded Pokémon or a battle kind's rule
+  (**verified**); Gen 3's separate ×1.5 for trainer battles isn't applied as such.
+- **Prize money:** the beaten trainer's highest level × a factor of 1, 2 or 4, where Gen 3 uses the last Pokémon's
+  level × 4 (**verified** for Colosseum).
+- **Pokérus never spreads:** the flag is read and ignored (**verified**).
+- **Evolution:** the day / night friendship evolutions never fire (no clock); kind 13 (Ninjask) isn't handled, the data
+  uses kind 4; Feebas has no way to raise Beauty (**likely**).
+- **Opponents' Pokémon:** their personality values are rerolled to fit the wanted gender and nature and to be
+  non-shiny for the opposing trainer; a Shadow Pokémon's personality, nature and IVs are fixed once you meet it; after
+  a snag the player becomes its original trainer, so it can turn out shiny (1 in 8192). Natures (personality mod 25)
+  and the shiny rule are Gen 3's.
+- **Colosseum's own systems:** Shadow Pokémon (Shadow Rush with recoil and no PP, the heart gauge, Hyper Mode and
+  Call, purification at the Relic Stone and through Celebi, snagging, EXP held back while the gauge is high, Rui
+  spotting Shadow Pokémon; no Reverse Mode), doubles as the default with one to three trainers a side, and the battle
+  kinds' rule switches.
 
 
 ## Disc data

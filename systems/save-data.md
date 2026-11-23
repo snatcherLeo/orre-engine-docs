@@ -9,29 +9,40 @@ are described; several sections' inner layouts are still open.
 
 All persistent game state lives in **one contiguous block**. Code never hard-codes offsets into it:
 it asks `savedataGetStatus(save, section)` (0x80129280) for a pointer to one of 17 sections. Passing
-`save = NULL` means "the current save", fetched from the global `lbl_8047ADB8` (`savedataGetWorkPtr` (0x80128E24)).
-Each section getter is a one-line `base + offset` (`fn_80128CC0`..`fn_80128E04`,
-`src/game/pokemon_range_8011F5FC.c`).
+`save = NULL` means "the current save", fetched from the global `now_savedata_ptr` (0x8047ADB8; the developers' own name, from XD's map) (`savedataBiosGetNowSavedataPtr`
+(0x80128E24); `savedataBiosSetNowSavedataPtr` sets it, and `savedataBiosGetSavedataBufferPtr` returns the memory area
+the block lives in). Each section getter is a one-line `base + offset` (`savedataBiosGetExRibbonPtr` ..
+`savedataBiosGetGamedataPtr`, 0x80128CC0-0x80128E04).
+
+The getter names are the developers' own. XD's demo build ships a linker map, and its
+`savedataBios` object lists the same getters **in the same order** (ExRibbon, Darkpokemon, MemoData, Sodateya, Mailbox,
+FlagLevel2 / 1 / 0, Pcbox, Hero, Gamedata, then the current-save setter and getter and the buffer getter), with the
+same code apart from each section's offset (**likely**, strong: the order, the sizes and the word in each name all agree
+with what the callers show the section holds). XD adds sections Colosseum lacks (AnywaySave, Relive, four spare "Yobi"
+sections, FlagSavedata) and has a single "Tool" section where Colosseum has two, Battle Mode (14) and Card-e (13); which
+of the two corresponds to it is open, so section 14 keeps its descriptive name and section 13 got one
+(`savedataBiosGetCardEPtr`). The three flag buffers are named Level0 / 1 / 2 in the original; this page's flag
+"classes" 1 / 2 / 3 are the same three, and XD's buffers sit 0x20 and 0x80 bytes apart exactly as Colosseum's do.
 
 ## Data structures: the sections
 
 | # | Getter | Offset | What it holds (evidence: callers) | Confidence |
 |---|---|---|---|---|
 | 0 | - | +0x0 | the whole block (save-integrity checks: `gamedataBiosGetGamedataAtttestPtr`) | high |
-| 1 | `fn_80128E04` | +0x0 | save bookkeeping: memory-card id, save id (`gamedatasaveBiosSetMemcardID`, `memcardSetSaveId`) | medium |
-| 2 | `fn_80128DEC` | +0x70 | **the player**: name, party, bag, money, badges (`HeroSaveData`, below; `heroBiosGetPokemonPtr`) | high |
-| 3 | `fn_80128DD4` | +0xB88 | **PC box** storage (`pcbox*`, `pokemonInitAry`) | high |
-| 4 | `fn_80128DB8` | +0x1BDBC | **story-flag buffer, class 1** (0x20 bytes = 8 words) | **verified** (main.c passes sections 4 / 7 to `GSflagInit`, `fn_801909A8`) |
-| 5 | `fn_80128D9C` | +0x1BDDC | **story-flag buffer, class 2** (0x80 bytes = 0x20 words) | **verified** (sections 5 / 8) |
-| 6 | `fn_80128D80` | +0x1BE5C | **story-flag buffer, class 3** (0x600 bytes = 0x180 words) | **verified** (sections 6 / 9) |
+| 1 | `savedataBiosGetGamedataPtr` | +0x0 | save bookkeeping: memory-card id, save id (`gamedatasaveBiosSetMemcardID`, `memcardSetSaveId`) | medium |
+| 2 | `savedataBiosGetHeroPtr` | +0x70 | **the player**: name, party, bag, money, badges (`HeroSaveData`, below; `heroBiosGetPokemonPtr`) | high |
+| 3 | `savedataBiosGetPcboxPtr` | +0xB88 | **PC box** storage (`pcbox*`, `pokemonInitAry`) | high |
+| 4 | `savedataBiosGetFlagLevel0Ptr` | +0x1BDBC | **story-flag buffer, class 1** (0x20 bytes = 8 words) | **verified** (main.c passes sections 4 / 7 to `GSflagInit`, `fn_801909A8`) |
+| 5 | `savedataBiosGetFlagLevel1Ptr` | +0x1BDDC | **story-flag buffer, class 2** (0x80 bytes = 0x20 words) | **verified** (sections 5 / 8) |
+| 6 | `savedataBiosGetFlagLevel2Ptr` | +0x1BE5C | **story-flag buffer, class 3** (0x600 bytes = 0x180 words) | **verified** (sections 6 / 9) |
 | 7 / 8 / 9 | constants | - | the **word counts** of the flag buffers in sections 4 / 5 / 6 (8, 0x20, 0x180: exactly their sizes) | **verified** (2026-10-16) |
-| 10 | `fn_80128D68` | +0x7D20 | **mail**: mailbox, flags, sort mode, received count (`mail*`) | high |
-| 11 | `fn_80128D4C` | +0x8168 | **daycare** (`sodateya*`: the Pokémon left there) | high |
-| 12 | `fn_80128D30` | +0x82A8 | **Strategy Memo** (`memo*`: seen/caught Pokémon notes) | high |
-| 13 | `fn_80128D14` | +0x9A1C | **Card-e** data (`CardEGrid*`, `cardesavedata`) | high |
+| 10 | `savedataBiosGetMailboxPtr` | +0x7D20 | **mail**: mailbox, flags, sort mode, received count (`mail*`) | high |
+| 11 | `savedataBiosGetSodateyaPtr` | +0x8168 | **daycare** (`sodateya*`: the Pokémon left there) | high |
+| 12 | `savedataBiosGetMemoDataPtr` | +0x82A8 | **Strategy Memo** (`memo*`: seen/caught Pokémon notes) | high |
+| 13 | `savedataBiosGetCardEPtr` | +0x9A1C | **Card-e** data (`CardEGrid*`, `cardesavedata`) | high |
 | 14 | `savedataBiosGetE3E8Ptr` (0x80128CF8) | +0xE3E8 | **Battle Mode state**, **not** the flag storage (that is sections 4-6); holds Battle Mode state (see below); the rest to re-check | medium |
-| 15 | `fn_80128CDC` | +0x1B014 | **Shadow Pokémon state**: it opens with 12-byte entries, one per Shadow save slot (the slot number is the Shadow table's +0x0A), whose +0x06 is a 16-bit **footstep count** (**verified** from the code: the field's step callback adds 1 per step for every unpurified Shadow Pokémon in the party and one left at the day care, and at 0x100 applies the walking or day-care gauge drop and resets it; `fn_801EE470` reads it, `darkPokemonSaveSetDp` writes it, despite that name; field-steps.md); then 0x18-byte rows per Shadow id starting at +0x49C (row +0x0A: the heart-gauge size used when the Shadow Pokémon is created, `darkPokemonSaveGet4A6` (0x801EEEB8) / setter `darkPokemonSaveSet4A6` (0x801EEE6C)); reached through `darkPokemonSaveGetPtr` (0x801EF1E4) | medium |
-| 16 | `fn_80128CC0` | +0x1C45C | **ribbons** (`exribbon*`: National / Earth ribbons) | high |
+| 15 | `savedataBiosGetDarkpokemonPtr` | +0x1B014 | **Shadow Pokémon state**: it opens with 12-byte entries, one per Shadow save slot (the slot number is the Shadow table's +0x0A), whose +0x06 is a 16-bit **footstep count** (**verified** from the code: the field's step callback adds 1 per step for every unpurified Shadow Pokémon in the party and one left at the day care, and at 0x100 applies the walking or day-care gauge drop and resets it; `darkPokemonSaveGetWalkSteps` (0x801EE470) reads it and `darkPokemonSaveSetWalkSteps` (0x801EE4DC) writes it; field-steps.md. XD keeps the same API names over its own rewrite, `darkPokemonBiosGetSteps` / `SetSteps`, which read a 32-bit walk count in its Shadow Pokémon class); then 0x18-byte rows per Shadow id starting at +0x49C (row +0x0A: the heart-gauge size used when the Shadow Pokémon is created, `darkPokemonSaveGet4A6` (0x801EEEB8) / setter `darkPokemonSaveSet4A6` (0x801EEE6C)); reached through `darkPokemonSaveGetPtr` (0x801EF1E4) | medium |
+| 16 | `savedataBiosGetExRibbonPtr` | +0x1C45C | **ribbons** (`exribbon*`: National / Earth ribbons) | high |
 
 Section order in memory is 0/1, 2, 3, 10, 11, 12, 13, 14, 15, 4, 5, 6, 16, so the block is at least
 0x1C45C bytes plus the ribbon section (~113 KB).
@@ -67,7 +78,7 @@ editor.
 | | sex, home place | u8 each |
 | | Poké Dollars, Poké Coupons, total coupons earned | s32 each |
 | | badge flags x 8, "hizuki" flag | u8 each |
-| | "hizuki" items (0xA slots), "hizuki" name (0x56) | "hizuki" is **Rui's internal name**; the 10 slots are her cut item pocket (bag-and-pc.md), not a date |
+| | "hizuki" items (0xA slots), "hizuki" name (0x56) | "hizuki" is **Rui's internal name**; the 10 slots are her cut item pocket (bag-and-pc.md), not a date. The name (block +0xB32) is **Rui's name as chosen on the naming screen**, typed or one of that language's presets, stored as UTF-16 text like the player's name (verified from four saves; regions.md) |
 
 Access is through `heroGetStatus(save, selector, index)` / `heroSetStatus`: selector 3 = party slot
 `index` (a Pokémon pointer), 0xD / 0xE = Poké Coupons / total coupons (`heroAddPokecoupon`).
@@ -84,6 +95,11 @@ Access is through `heroGetStatus(save, selector, index)` / `heroSetStatus`: sele
   box names decode as UTF-16 ("MY BOX", "BOX2", "BOX3"), and the boxed Pokémon are full 0x138-byte records in the
   party format (species, level, IVs, EVs, nature and stored stats agree with the Gen 3 stat formula); an empty slot
   has species 0, and no box count field was needed to read them.
+- (**verified** on a real save) An empty box slot is **not all zeros**. Every empty slot holds the
+  same 0x138 bytes: zero except +0x10 = 2, +0xD0 = 0xFF and +0xDC = -100 (the heart gauge, `InitDp` / `Dp`, set to
+  -100 by `pokemonInit`). Releasing a Pokémon from a box (`delPokemon__5PCBOXFScSc`) only runs `pokemonInit` on that
+  one slot and touches nothing else in the save, so the box needs no count field and a tool can release a Pokémon by
+  writing the empty record over its slot.
 - (**verified** by comparing two end-of-session saves of the same play, one from the console and
   one from a PC replay) The 0x138-byte record has **padding bytes the game never names**: after the species id
   (+0x02-0x03), after the catcher's sex (+0x11-0x13), the last two bytes of the 0x18-byte original-nickname buffer
@@ -122,17 +138,19 @@ bytes, so a tool must never swap them as one 32-bit number.
 ## Battle Mode settings in section 14 (2026-10-16, verified from the menu headers)
 
 +0x00 is the Battle Mode kind (0 Colosseum Battles, 1 Mt. Battle 100: `BATTLEMODE_BATTLEYAMA100` in a retail assert,
-2 Gang Battle, 3 Battle Now); +0x08 is the rule (0 any, 1 Lv50, 2 Lv100, 3-5 edited rules).
+2 Gang Battle, 3 Battle Now); +0x08 is the rule (0 any, 1 Lv50, 2 Lv100, 3-5 edited rules). The
+whole section is mapped in battle-mode.md.
 
 ## Memory card file and the save header
 
 - **Card file:** name `pokemon_colosseum`, created with `CARDCreateAsync(..., 0x60000, ...)`: **0x60000
-  bytes (384 KB, 48 card blocks)**, several times the ~113 KB block, so it likely holds more than
-  one copy. Region check on load: `regions.md`.
+  bytes (384 KB, 48 card blocks)**: a 0x6000 header (banner, icon, comment) then **three slots of 0x1E000** (verified
+  2026-11-17 from saves of all three regions, the same in each). Region check on load: `regions.md`.
 - **Attestation stamp** (`gamedataAttest*`, 4 bytes): byte 0 version id, byte 1 generation id,
   byte 2 area id, byte 3 language-area id. Checked on load (`gamedataAttestCheckValid`). Values written
   for a new save (`hero.c`): version 0xB (Colosseum), generation 3, area/language 1/1 (Japan),
-  2/2 (USA), 3/8 (PAL) (`regions.md`). **Every
+  2/2 (USA), and on a European disc area 3 with **the chosen language** (2 English, 6 Spanish; verified from real
+  PAL saves; `regions.md`, "What real saves from each region look like"). **Every
   Pokémon record carries the same kind of stamp** (`attest[4]` at +0x08 of `PokemonBios`): the
   game, generation, region and language it came from. A Pokémon storage tool must preserve it.
 - **Save header** (`gamedatasaveBios*`, section 1): audio option, vibration off, current floor id,
@@ -171,6 +189,30 @@ word 0xE90; a mismatch only sets a flag (`raw[0x40]`).
 
 For a save editor or Pokémon storage tool: decrypt with the rule above, edit the block at +0x08, then
 re-encrypt (which recomputes the digest). The first 0x18 bytes of a slot stay unencrypted.
+(**verified** by decrypting a real save with these rules; all three slots passed): The digest
+covers the plain slot **with the word at +0x0C set to zero** (the "zeroed before checking" row above), and a few
+fields a save list can show without running the game, offsets in the decrypted save block (slot +0x08):
+- +0x00: the region stamp (4 bytes; 0x0B 0x03 0x02 0x02 for a US Colosseum save, as in "Attestation stamp" above);
+- +0x20: the **play time in seconds**, a big-endian 32-bit float (the save header's play time, `gamedatasaveBiosGetPlaytime`
+  reading +0x18 of a header that sits at +0x08 of the block: **likely** for the mapping, verified for the value: 52,967 s
+  = 14 h 42 min on a late-game save);
+- +0x70: the **trainer's name** (the start of section 2), big-endian 16-bit characters ("WES" = 00 57 00 45 00 53).
+
+(**verified**: read from three real saves, and the room confirmed by the game resuming there): The
+save header at block +0x08 holds, at its +0x14, the **room to resume in** (block +0x1C; `gamedatasaveBiosGetFloorid`,
+read by `floorReturnToSavedRoom` on Continue), at +0x1C the **room before it** (block +0x24, where the game goes when
+the player leaves) and at +0x20 a byte, the **entry point** in that room (block +0x28, `gamedatasaveBiosGetFloorposindex`).
+The game saves only at PCs, so the room is always a PC's room. Its place name is the room's floor-record message
+(+0x24, `floorGetPlaceName`), the same name a Pokémon's summary shows for where it was met. The Continue screen's
+Snagged and Purified counts come from the story flags (section 6): the Shadow records whose +0x12 (snagged) or +0x14
+(purified) flag is set (`darkPokemonCountFlag12` / `14`; shadow-system.md). The card file's directory entry (.gci
++0x28) holds when the console last wrote it, in seconds since 2000-01-01 on the console's own clock.
+A tool reads the slot with the highest valid save counter, as the game does.
+An independent decoding agrees: TuxSH's open-source save library (LibPkmGC, part of PkmGCTools,
+LGPLv3; the editor PkmGCSaveEditor is GPLv3) uses the same file size, three 0x1E000-byte slots from 0x6000, the
+save counter at +0x04, the SHA-1 key stream over +0x18 .. 0x1DFD8 with the inverted digest as the first key, the
+digest at +0x1DFEC, and sections at +0xE3E8 (Battle Mode) and +0x1C45C (ribbons) (**verified** by comparing the
+numbers; read online, no code taken).
 
 Two more checks every card read makes, both verified by loading converted saves:
 - **Every slot's first eight words must sum to zero**, empty slots included (bytes 0 and 1 must be 1; word 1 is the
@@ -208,7 +250,7 @@ the port's card loaded, was played and saved there, and the port's file loaded u
   the copy it writes.
 - **It refuses to overwrite a save from another card** (**verified**, code and a recorded play): before overwriting,
   the save task reads the three slot headers, takes the newest slot and compares the card ID stored in it with the ID
-  of the save in memory (`fn_801CF9C8`); if they differ it stops with an error and writes nothing. It is an anti-swap
+  of the save in memory (`memcardCheckSlotHeaders`); if they differ it stops with an error and writes nothing. It is an anti-swap
   check: a card exchanged for another between loading and saving is not overwritten.
 - **Mt. Battle's link step restores an older save image** (**verified**, code; **likely** the only place, not
   searched): before Battle Mode's link mode the game copies the whole save, runs the link, then copies it back
@@ -275,8 +317,9 @@ Section 14 (0xCC2C bytes) holds, after its 0x24-byte header (the run words above
 - **four trainer entries** of 0x1660 bytes from section +0x24, one per player of a Battle Mode setup
   (`savedataBattleGetEntryPtr`; computer opponents fill the entries no person plays, **likely**: in an end-of-story
   save the three other entries hold other trainers' teams);
-- **a copy of all four** from section +0x59A8 (the setup copies each entry 0x5984 bytes further on before a battle,
-  `menuColosseumBattleSetup`; **likely** a "before the battle" state to restore);
+- **four player entries** from section +0x59A8 (who plays, which team, which controller), which each battle's entries
+  at +0x24 are built from (**verified**, battle-mode.md); +0x59A4 just before them holds the coupons earned in the
+  current run;
 - **the saved hero**, one more entry at section +0xB328, with its "present" byte at +0xC988
   (`savedataBattleSetSavedHero` / `GetSavedHero`); the registered team;
 - the suspended-run words from +0xC98B (above) and **six 0x54-byte rules** from +0xC9DC (`savedataBattleInit`: three
@@ -291,21 +334,47 @@ why a registered Pokémon appears twice in the save. Every multi-byte field insi
 
 **A run in progress and a suspended run** (**verified** from a recorded Mt. Battle run, the
 resume code `menuCBResumeYama` and the suspend code `gbaConvCaptureMemo`). Section 14's first words describe the run:
-+0x0 and +0x4 (the run kind: 1 / 1 for a Mt. Battle run), +0x8, +0xC (the colosseum: 6 = Mt. Battle, which the resume
-asserts), +0x14 **the wins so far**, +0x18 a second counter that starts at 5 and rose by one with every win in the
-recorded run (its meaning not settled: continues or a trainer index), and the byte +0x1C (1 while a run is in
-progress; cleared when the run ends or a link mode starts). Suspending copies these words to **+0xC98C** with the
++0x0 the mode (1 = Mt. Battle), +0x4 the battle type (0 single, 1 double, 2 multi), +0x8 the rule, +0xC (the
+colosseum: 6 = Mt. Battle, which the resume asserts), +0x14 **the wins so far**, +0x18 the **continue count** (5 at the
+start, + 1 for a win where none of the entered Pokémon fainted, - 1 for each continue used; Colosseum runs use it
+too), and the byte +0x1C, set only **for the length of one battle** (it tells the battle to take both teams from this
+section), so a save never stores it set (**verified** from the code, battle-mode.md). Suspending copies these words to **+0xC98C** with the
 "suspended" byte at **+0xC98B**, followed by the player memo: +0x20 the room to resume in, +0x24 the room before it,
 +0x28 position (3 floats), +0x34 rotation (3 floats), then the story variables 0xAFC, 0xAFD, 0xB11 and 0xDE1 at +0x40,
 +0x44, +0x48, +0x4C. Resuming writes the words back, sets variable 0xB59 from the wins, restores the variables and
 puts the player back in the saved room. Starting Mt. Battle again as a new challenge resets the words (wins 0, the
-counter 5) and clears the suspended copy: a suspended run is replaced without asking.
+counter 5) and clears the suspended copy; when a suspended run exists, the start screen first shows it and asks again
+(message 0x44C8; **verified** from the code).
 (**verified** from the code and a card with a suspended run): The run words are seven 4-byte words
 (+0x0 to +0x18), copied whole to +0xC98C; the player memo starts at **+0xC9A8** with its "valid" byte, then two 4-byte
 room ids (+0xC9AC, +0xC9B0), six 4-byte floats (+0xC9B4 to +0xC9C8) and the four story values as 4-byte words (+0xC9CC
 to +0xC9D8). The card stores all of them big-endian, like every multi-byte field in the save. A save editor that lets
 a player change a suspended run (the wins, the room) edits these words; the resume code checks that the colosseum is 6
 and the kind is 1 and stops otherwise.
+
+### Who owns section 14 
+
+**All of section 14 is Battle Mode's**, the Mt. Battle memo included (**verified** from the code):
+- **Written only by Battle Mode.** The memo is filled in two places, both only during a Battle Mode run: suspending a
+  Mt. Battle run (`menuSaveLoadSaveGame(1)`, which asserts the mode is `BATTLEMODE_BATTLEYAMA100`; called by the quit
+  prompts of the Mt. Battle areas and the run's pause menu) and the start of each of its battles from the field
+  (`menuCBBattleReturnToMenuRoom`, reached only while variable 0x8AE is set). The rest of the section is written by the
+  Battle Mode menu and battle code.
+- **Read only by Battle Mode.** The memo is read back by Battle Mode's Continue (`menuCBResumeYama`), which writes the
+  four Mt. Battle values (0xAFC areas cleared, 0xB11 rest stops reached, 0xDE1, and 0xB59 from the wins) back over the
+  story flags before putting the player in the saved room.
+- **Not the story's climb.** The story's own Mt. Battle progress is in the story flags: the streak in variable 2673 and
+  flags 2624, 2625, 2629 (colosseum-challenges.md); the story climb leaves 0xAFC, 0xB11 and 0xB59 at 0.
+- **Links to the rest of the save:** the coupons a run earns sit in section 14 (+0x59A4) until the run ends, then are
+  added to the player's coupon count (section 2) and zeroed; the memo's four values are copies of story-flag values
+  (above); the registered team is a copy of party records made when it is registered.
+- Section 14 changes only in Battle Mode, and Battle Mode saves every change to the card itself (its own save kinds,
+  memory-card.md). So the copy on the card is always the newest one (**likely**: no story-side writer of section 14 was
+  found).
+
+What it means for a tool that combines two saves (a port's autosave loaded over a newer card save, a save editor
+merging): take section 14 whole from the save that is newest for Battle Mode, and everything else from the save that is
+wanted for the story; never split section 14.
 
 ## Open questions
 

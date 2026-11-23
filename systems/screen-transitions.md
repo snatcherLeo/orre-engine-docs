@@ -16,7 +16,7 @@ function every frame with the transition's progress until it reports that it is 
 
 ## Data structures
 
-**Battle-entry wipe table** `fight_encount_wipe_data` (12-byte records, count in `lbl_80478D20`, read by
+**Battle-entry wipe table** `fight_encount_wipe_data` (12-byte records, count in `fight_encount_wipe_data_number`, read by
 `fightEncountWipeDataBiosGetPtr(index)`; field names from the game's code, verified):
 
 | Field | Type | Meaning |
@@ -29,6 +29,15 @@ function every frame with the transition's progress until it reports that it is 
 The 11 entries in order: fade-out-in, `yoko` (horizontal), `tate` (vertical), `ball` (Poké Ball), `boss`, `carde`, `yoko_or_tate`, `yoko_or_tate_or_ball`, fade-out-in,
 `trainer`, fade-in.
 
+(**verified** from the code): The two combined entries **pick their style at random**, and the
+pick draws from the game's **one shared random-number generator** (the same one the battle camera and other effects
+draw from; see rng.md). Their init hooks (`fadeEffectHookFunction_yoko_or_tate_Init` and the `_or_ball` one) ask a
+small helper for a random number below 2 or below 3, and that helper only calls the fade system's random function,
+which reads the shared generator. **Consequence for mods:** changing a battle's transition to or from one of these
+two changes how many random numbers are drawn, so every later random result shifts (a different damage roll, a
+different encounter outcome). Swapping between two fixed styles is likely harmless if those draw no random numbers
+(not checked).
+
 **which battles use which entry** (verified from the disc). Each battle's encounter record holds
 its wipe index (the 32-bit word at offset 0x10, read by `fightEncountDataBiosGetWipeId`). Across the 566 battle
 records the random horizontal-or-vertical wipe is by far the most common, followed by the trainer swirl (entry 9),
@@ -36,23 +45,27 @@ the Poké Ball wipe and the short fade-in (entry 10); the boss wipe and the fade
 each, and the remaining styles by a handful. The first story battle (Willie at Outskirt Stand) uses entry 9, the
 trainer swirl.
 
-The executable's table points entry 9 at the init that installs `fn_801C4CB8` (`fadeEffectHookFunction_trainer_Init`)
-and entry 10 at the one that installs `fn_801C54FC` (`fadeEffectHookFunction_fadein_Init`) (verified from the
+**The Poké Ball wipe** (**verified** from a log of every draw): its frame function is
+`fadeEffectHookFunction_ball`, which draws **two trails of 12 balls each**; like the other styles it is drawn from the
+fade daemon (`fadeDaemon`), on top of the scene.
+
+The executable's table points entry 9 at the init that installs `fadeEffectHookFunction_trainer` (`fadeEffectHookFunction_trainer_Init`)
+and entry 10 at the one that installs `fadeEffectHookFunction_fadein` (`fadeEffectHookFunction_fadein_Init`) (verified from the
 executable's data, and in Dolphin: Willie's battle starts with the trainer swirl).
 
 **What the trainer swirl looks like** (verified in Dolphin, Willie's battle): the field freezes and warps more and
 more (a horizontal wave and a radial smear) while the battle loads, then a large ring overlay cross-fades into the
 battle field.
 
-**The fade-in style** (entry 10, `fadeEffectHookFunction_fadein_Init` → frame function `fn_801C54FC`, verified from
+**The fade-in style** (entry 10, `fadeEffectHookFunction_fadein_Init` → frame function `fadeEffectHookFunction_fadein`, verified from
 the code) draws no snapshot. While the fade is still pending it draws an opaque black full-screen rectangle; once the
 fade runs, the rectangle's alpha falls with the fade's progress while the fade itself draws its own colour rectangle.
 Its wipe time is 0.1 s, so it is a brief blink, not a long black screen.
 
 **Camera work for the "trainer" style** (`FadeCameraWork` at `lbl_80467030`): frame counter, value / step / target
 of an easing value, two texture handles (`0x0F861200`, `0x0F871200` resources). The code that sets it up
-(`fn_801C53BC`) runs from the frame function `fn_801C4CB8`, which the trainer init installs (the boss init installs
-`fn_801C55D8`). The trainer style
+(`_fadeEffectFunction_trainer_FirstInit__FP9GStexture`) runs from the frame function `fadeEffectHookFunction_trainer`, which the trainer init installs (the boss init installs
+`fadeEffectHookFunction_boss`). The trainer style
 also captures every frame into its texture itself and draws it back rotated and zoomed as three offset copies, then
 blends it with the two textures (verified from the code).
 
@@ -70,8 +83,8 @@ blends it with the two textures (verified from the code).
    *waited*, not in wall time: a frame whose extra time passes outside that wait, or a pass in which the task doesn't
    run, stretches the fade on screen without changing its values (**likely**; seen once on the console, a fade-in that
    held one value for an extra refresh, cause being traced). `fadeSet` restarts the elapsed time at 0.
-3. "Boss" style (`fn_801C55D8`, verified 2026-10-14): on its first frame it sets up the ripple simulation
-   (`fn_801C5748`: 40 x 30 grid, five "shock" impulses), every frame advances an eased value and the fluid
+3. "Boss" style (`fadeEffectHookFunction_boss`, verified 2026-10-14): on its first frame it sets up the ripple simulation
+   (`_fadeEffectFunction_boss_FirstInit__Fv`: 40 x 30 grid, five "shock" impulses), every frame advances an eased value and the fluid
    (`fn_801C6688`); **only on the frame the transition finishes** (`finish == 1`) it evaluates the fluid and draws the
    distorted screen (`fadeFluidEvaluate`, `fn_801C6934`).
    (**verified** from the code): **how the ripple works.** It is the classic height-field wave
@@ -87,6 +100,11 @@ blends it with the two textures (verified from the code).
    **For a 64-bit port** (**verified**, a crash in the PC port (the decompiled code running natively)): the neighbour above is read at index `x - (columns + 1)`
    computed in unsigned 32-bit arithmetic. On the GameCube the wrapped value plus the 32-bit pointer lands back on the
    row above; with 64-bit pointers the read lands about 48 GB past the grid. The index has to be computed signed.
+   (**verified** from the code): The **Poké Ball** style (`fadeEffectHookFunction_ball`) works the
+   same way. A one-shot flag makes its first frame call `_fadeEffectFunction_ball_FirstInit__Fv` (XD's name for it),
+   which looks up the wipe's two textures by resource id, resets the eased value (step 4, target 48), and places two
+   trails of 12 points each at opposite screen corners, their alpha fading down the trail. Every later frame moves and
+   draws the trails.
 4. **How a fade is timed** (**verified** from the code and in Dolphin). `fadeSet` resets the
    elapsed time to 0. Each call of `fadeDaemon` adds the last frame's length in retraces (`GSgetFrameStep`, the
    graphics state's frame-retrace count) divided by the frame rate. `fadeDaemon` runs once per game-logic pass, from
@@ -107,7 +125,7 @@ executable.
 ## Changing it
 
 - New transition styles: add an init hook + frame function and a table record; the table's count is a separate
-  global (`lbl_80478D20`).
+  global (`fight_encount_wipe_data_number`).
 - For a PC port: transitions are timed in frames by `fadeDaemon`; frame-rate independence needs the progress
   computed from time.
 

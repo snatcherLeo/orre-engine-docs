@@ -37,6 +37,13 @@ The lengths are in characters. (Mode 1's script call is the only `menuNameEntryO
   0x11470400). The preset list's callbacks reach the mode's id list through the window's menu argument (+0x60).
 - **The letter pages**: each page is a message whose text is the grid itself (rows like "ABCDE FGHIJ 789", spaces
   as gaps), one set for upper case and one for lower case, plus a row of symbols; X switches pages.
+  In detail (**verified** from the linked code):
+  - **Each page is four messages, one per grid line:** page 0 (green) 0x2F04-0x2F07, page 1 (blue) 0x2F08-0x2F0B.
+    They come from a two-row page table (`lbl_80266E18`: tint colour, the X button's label, four line messages).
+  - **The grid is 15 letters wide and 4 lines tall**, with a 16th column for the three buttons. Letters are 27 px
+    apart, lines 35 px apart.
+  - **The cursor never wraps:** it stops at the edges.
+  - A gap in a line types a space.
 - **The case-pair table** (`lbl_8047B920`, two message ids): R looks up the last letter in these pair lists and
   swaps it for its partner. On the US disc the first slot is empty and the second is a message of upper / lower
   pairs ("AaBbCc..."), so **R toggles the last letter's case**; the screen's own label for R says so ("A⇔a").
@@ -56,8 +63,16 @@ The lengths are in characters. (Mode 1's script call is the only `menuNameEntryO
    item: choosing it opens the keyboard). Picking a
    preset asks "Is <name> OK?" (a yes / no box that starts on **Yes**); yes takes it, no returns to the list.
    Backing out of the keyboard returns to the list (**likely**, from the loop).
+   **B does nothing on this list** (**verified** from the code, the menu record and a run): the
+   list's own button callback (`menuNameEntrySelectButton`, set as menu 0x70's button handler in its menu record)
+   closes the list on A, and only while B isn't held; it never reads B. So the player can't leave the name menu: the
+   game gives no way back to the top menu once New Game's question is answered, and the partner must be named too.
+   (`menuNameEntry` still has a branch for a list result of -1, the value a normal menu returns on B, which opens the
+   list again; with this callback it isn't reached from B.)
 4. **The keyboard** (modes 2 and 3 go straight here): the letter grid with the cursor; A types the letter under the
-   cursor (once the name is at its maximum length the cursor jumps to a fixed slot, **likely** DONE), B deletes,
+   cursor (once the name is at its maximum length the cursor jumps to a fixed slot: **verified**,
+   DONE; typing at the maximum overwrites the last letter; an empty or all-blank name becomes the
+   default, the first preset in modes 0 and 1), B deletes,
    X switches the letter page, R toggles the last letter's case, START finishes. The on-screen buttons are
    "DONE", "BACK" and the R hint. Key bits: message-windows.md, "Window input keys".
 5. **Finishing** stores the name by mode: mode 0 only keeps it in the request block (the title code then passes it
@@ -121,6 +136,14 @@ number **is** the control code.
 | Pokémon nicknames | the Pokémon codes (0x14-0x19 in battle, 0x32 / 0x33, 0x36 in menus) | the Pokémon record's nickname field (0x16 bytes = 11 units; entry allows 10) | |
 | PC boxes | menu text | the box header (up to 8 characters, `pcboxSetPokemonBoxName` refuses longer) | default "BOX 1" .. "BOX 3" |
 
+**The name buffer** (**verified** from the linked code):
+- **Where the name is typed:** straight into `lbl_803A2068`, which holds 12 units with the mode right after them.
+  Typing writes a terminator after each letter, so **11 letters is the most this buffer can take** without
+  overwriting the mode.
+- **The name field's frame** (its underscores and caret) exists only for maximum lengths 7, 8 and 10. Any other value
+  hides the frame and the typed name.
+- **So a longer limit needs** a bigger buffer and a name field drawn some other way. A table edit alone is not enough.
+
 **Length limits.**
 - Entry limits: player 7, partner 7, nickname 10, box 8 (the per-mode table above); the save fields hold more for the
   player and partner (22 and 43 units), exactly 10 for nicknames, 8 for boxes.
@@ -152,9 +175,25 @@ number **is** the control code.
 
 ## Region notes
 - The R key's code is the **Japanese voiced-mark swap** (`exchangeDakuon`, two pair lists). The US build keeps the
-  code and changes the data: the first pair list is left empty and the second holds upper / lower case pairs, so
-  the same key becomes the case toggle. What the Japanese build puts in both lists is not read yet.
-- The page grids and the maximum lengths (7 / 7 / 10 / 8) are region data; Japanese names are **likely** shorter.
+  code and changes the data: the first pair list is empty and the second holds upper / lower case pairs (**verified**:
+  the table holds 0 and message 0x2EF7), so the same key
+  becomes the case toggle. (**verified** from the Japanese and European discs' name-entry banks): In the Japanese
+  build the first list pairs each kana with its voiced form (ka / ga style) and the second with its semi-voiced form
+  (ha / pa style), so R adds or removes the marks; the European builds keep the US arrangement, and German adds its
+  umlaut pairs (Ä ä Ö ö Ü ü) to the case list.
+- **The maximum lengths per region** (**verified**: read from each disc's own copy of the per-mode
+  table, found by its title message keys): US and Europe 7 / 7 / 10 / 8 (player, partner, nickname, box); **Japan
+  5 / 5 / 5 / 8**. The table sits at a different address in each build (US 0x80266DD8; the others found by pattern).
+- **The letter pages per region** (**verified** from the banks):
+  - **Japan:** three pages, chosen with X: katakana, hiragana and full-width Latin (upper and lower case, digits,
+    Japanese punctuation, the gender signs), each four rows of three blocks; buttons labelled in kana; R adds the
+    voiced marks.
+  - **US and Europe:** pages of upper case and lower case Latin (three letter rows with digits, then a row of
+    symbols); the button labels and the preset names are each language's own. **German** adds Ä Ö Ü (and ä ö ü) to
+    the third row; French uses « » and German „ “ in the symbol row. **French, Spanish and Italian offer no accented
+    letters** on this screen (no é, no ñ).
+  - The US bank still carries the Japanese build's kana and full-width pages and its voiced-mark list under the same
+    keys (left over; the US screen never shows them); the Japanese bank has no US-style Latin pages.
 
 ## Open questions
 - Who opens mode 3 (box names): no C caller found; the PC box screen may use its own room copy.

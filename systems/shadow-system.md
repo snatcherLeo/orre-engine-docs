@@ -103,8 +103,42 @@ recording).
   flute as usable there; using it on a party Pokémon calls `preReliveSetParameter(1, slot)` and sets **flag 3588**
   ("Celebi was summoned": Eagun later mentions it). In `preReliveMain` the flute path
   (selection mode 1) goes **straight to the ceremony for that slot**, in its Celebi version (target mode 1), with
-  **no gauge check** (**verified** for this function). Whether the item menu only offers Shadow Pokémon, and whether
-  the flute can be used more than once, wasn't traced (**likely** once, from flag 3588 and public knowledge).
+  **no gauge check** (**verified** for this function).
+  (**verified** from the code and the decoded room script): **how the flute is "usable there".**
+  Its use function (`itemFieldUsePlayTimeFlute`) works only while item 537 is on a short "usable now" list, otherwise
+  "This item can't be used now" (0x426A). Only one script command fills that list; in the forest it is the room
+  script's function 11, a **kind-4 event on the stone's examine plane**. Kind-4 events run only **when the pause menu
+  opens**: the game looks a short way ahead of the hero's facing and fires kind 4 for each examine plane it finds. So
+  the flute works when **the hero faces the stone, close to it, as the menu opens**: not a room, flag or area check.
+  The list is cleared again at each lookup. The flute only accepts a Shadow Pokémon whose heart is **not yet open**
+  (gauge above 0; otherwise 0x4261), so Celebi is for a heart that isn't open yet; the ceremony room then sets the
+  gauge to 0 itself (`reliveMain`, mode 1). **It is single-use:** the bag removes it as soon as a Pokémon is picked,
+  before the ceremony runs (a ceremony whose effect fails to load still costs the flute). The pause menu then queues
+  the room script's function 10, which calls `preReliveSetParameter(1, slot)` and sets flag 3588.
+- **The stone's event can be started from elsewhere** (**verified** in a PC build and from the
+  code): a script event word is the script's id in the high half and the function number in the low half (the VM
+  splits it so when it starts a script), so the room script's function 9 (the stone's examine event) is **0x01000009**,
+  as the flute's function 10 is 0x0100000A. Queued from the pause menu as the hero step's next event (the way an item
+  queues its event), function 9 runs exactly as at the stone: its flag check, its open-heart count, then the
+  ceremony's start, which picks the Pokémon and warps to room 0x385. Wes need not stand near the stone; the ceremony
+  stages itself and the forest comes back with him where he stood. The flute's "usable now" list is cleared at the end
+  of **every** pause menu (the lookup that clears it runs as the menu closes, whatever was chosen), so an entry added
+  while the menu opens lasts exactly that one menu. And an entry added there makes the flute work anywhere it is added:
+  used at the forest's entrance on a closed heart, it ran the Celebi ceremony and purified the Pokémon (its purified flag set: 1300
+  for Shadow id 39, so the flag is 1261 + the Shadow id).
+- **The rooms** (**verified** from the room list): the Relic Forest is **one room, 0x27**
+  (`M3_shrine_1F`, named "RELIC FOREST" in the game's room list): the forest and the stone's clearing together, reached
+  through the caves 0x25 ("CAVE TO RELIC") and 0x26 ("SECRET CAVE"). The ceremony runs in its own menu room, **0x385**
+  (`M3_shrine_1F_rl`), pushed over the forest, so the hero is back where he stood afterwards. The stone's sparkle (the
+  room's main loop) shows while flag 1067 is set, an open heart is in the party and the hero is inside a box around the
+  stone.
+- **The heart-open test** (**verified**): "Shadow, and gauge exactly 0", the same in three places
+  (the stone's count `scriptGetDarkPointZeroPokemonNum`, the stone's party picker, kind 7, which answers a non-Shadow
+  Pokémon with 0x44DD and a heart not yet open with 0x44DE, and, reversed, the flute's filter).
+- **What the ceremony does, in order** (**verified**, `reliveCeremonyAll`): the purified flag; Hyper
+  Mode cleared; the gauge set to -1 (no longer Shadow); the real first move's message; the banked EXP (levels and new
+  moves); friendship = current + banked + 70; an evolution check and scene; the **National Ribbon**; the nickname
+  question. The nature is untouched.
 - **The mode table** (`preReliveMain`, **verified**): it counts party Shadow Pokémon not yet purified and those with an
   empty gauge, and whether the flute is owned. Examining the stone only does something when an empty-gauge Pokémon is
   in the party (with or without the flute); the flute path ignores the counts.
@@ -172,5 +206,4 @@ Not applicable in any special way: the gauge is a few integers per Pokémon, upd
 step, a scent), never every frame.
 
 ## Open questions
-- The Time Flute's item-menu filter and single use.
 - The drop table's and the scents' actual numbers (data; read from `common_rel` when a mod tool needs them).

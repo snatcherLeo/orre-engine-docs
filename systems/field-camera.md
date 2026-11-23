@@ -37,7 +37,7 @@ and pulls back smoothly as they move through the room, without any camera path b
    - the result is **smoothed** over frames: new value = 0.25 x old + 0.75 x target, so the view eases toward
      the blend instead of snapping;
    - **no points**: the field camera leaves the camera alone (the room's defaults or a script's settings stay).
-3. **Cutscenes** switch it off: a scene script calls `std136_fieldClearFlag_8047ad71` first (S1_out's arrival
+3. **Cutscenes** switch it off: a scene script calls `std136_fieldClearFlag_8047ad71()` first (S1_out's arrival
    scene and the Willie battle both do), then places the camera itself (`GSscene_SetMode(3)`,
    `std040_cameraSetPosition`, `cameraSetRotation`, ...).
 4. **Giving it back**: `cameraReturn(wait, duration)` returns the scene to normal mode and, if the room has field
@@ -74,7 +74,19 @@ sky isn't drawn, so the authored camera also sets **how far the camera sees**.
 - No camera paths, collision tests or look-ahead: a handful of weighted averages per frame (a room has at most a
   few points), plus one smoothing step.
 
+## A scene can hand the player back before the camera 
+The player walking again does not mean the field camera is back. In Phenac City's plaza (room 0x3), the kidnapper scene
+ends with `heroMoveTermEvent` (the player moves, talks, opens the pause menu), but the field camera stays off: the
+scene's own camera keeps framing the sack while the player talks to the bystanders, until the next scene (the sack
+untied, Rui joining) has ended (that it comes back through that scene's `cameraReturn` is **likely**; not traced).
+**Verified** from a PC replay of a recorded play session that logged the
+field camera's enabled bit every frame: off for the whole stretch from the hand-back to the untie (about 53 seconds of
+free walking in that recording), on again once Rui had joined. So "the field camera is on" is a stricter test than "the
+player has control": code that wants to know whether a scene still owns the room can use it (a scene that has handed
+control back but not the camera has usually not finished), code that wants to know whether the player can act cannot.
+
 ## Open questions
 - What the room's defaults are used for when a room has field points (only `cameraReturn` without points uses
   them, from the code read so far).
+- How common the "player back, camera not" stretch is across the story's scenes (one case known, Phenac's sack).
 - `fn_801174C4` / `fn_80117500` (used by `cameraReturn`): **likely** "has field points" and "re-enable".

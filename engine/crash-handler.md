@@ -29,7 +29,7 @@ line format (address, back chain, saved link register).
 ## Flow
 1. **At boot** (`fn_80006250`): `OSSetErrorHandler` for system reset, machine check, DSI, ISI, alignment, floating
    point, performance monitor, breakpoint, system interrupt and thermal interrupt; and, **only when no debugger is
-   attached** (`DBIsDebuggerPresent == 0`, 0x800A2C58), also for program, system call and trace exceptions (so a developer's debugger
+   attached** (`DBIsDebuggerPresent() == 0`, 0x800A2C58), also for program, system call and trace exceptions (so a developer's debugger
    keeps those).
 2. **On an exception** (`fn_80006378`): save the error number and arguments, copy the context, install a recovery
    handler (`fn_800064A0` reloads a context), re-enable the scheduler and start a thread for the report.

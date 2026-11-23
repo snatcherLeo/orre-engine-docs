@@ -60,7 +60,7 @@ and 4, Pyrite 5, Agate 6, The Under's mart 7, its herb shop 8 and its vending ma
 new-game-flow.md): the Poké Coupon exchange of Battle Mode, outside story mode (*likely*; an
 emulator walk of the menus found "PokéCoupon Exchange" in Battle Mode's Solo Battle menu). Their stock is the same as
 Mt. Battle's counter (shop 13). Every shop, 9 included, is also reachable from a
-developer test menu (`fn_8000CF68` next to `dbgMenuMenuTestPokemonMenu` in `src/game/gs_party_access.c`, a 14-entry key →
+developer test menu (`dbgMenuMenuTestShopMenu` next to `dbgMenuMenuTestPokemonMenu` in `src/game/gs_party_access.c`, a 14-entry key →
 shop table at `lbl_80266700`) (*likely* debug-only). Shop 9 (the TM list alone) is opened by no room script and no
 player menu found so far.
 

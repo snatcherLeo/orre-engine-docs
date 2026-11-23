@@ -2,6 +2,15 @@
 
 The docs are published in batches. Each entry lists what changed for readers: new pages and notable corrections.
 
+## 2026-11-24: fifth batch
+
+- New pages: **Battle Mode** (`colosseum/battle-mode.md`) and an **address map** (`engine/address-map.md`).
+- **Regions:** the Japanese release's differences, checked on screen.
+- **Models, move effects and move files:** path animations, Spinda's per-Pokémon spots, see-through move models, overlay layers.
+- **Fonts, the bag and PC, saves and the new-game flow:** the Japanese fonts, every item's Use option, saving step by step, the title menu.
+- **Battles:** Colosseum compared with Gen 3, the battle camera's timing, the Pokémon tables' Ruby / Sapphire origin.
+- **The port playbook:** new bug families and how they were found, plus many smaller corrections.
+
 ## 2026-11-05: fourth batch
 
 - New page: **Battle camera** (`systems/battle-camera.md`): who controls the camera in a battle, when each shot is

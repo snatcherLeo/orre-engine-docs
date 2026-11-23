@@ -76,6 +76,14 @@ facing the player at that moment, so where it wandered decides whether, and when
    that is why talk scripts address "L1, L2": the speaker), then the speech bubble is closed and the person resumes.
 5. Event mode ends and the pad state is cleared again.
 
+## Where a person's visibility lives 
+Showing or hiding a person (`peopleSetVisible`; that the room scripts' show / hide calls go through it is **likely**) writes one byte of the person's
+entry, +0x21, and passes the same byte to the model's visibility (`GSmodelSetVisibility`); the entry keeps it, so the
+byte read back says whether the person is shown (**verified** from the code, `fn_8018FB60`). A hidden person keeps its place and state: in Phenac's plaza the
+hidden sack and Rui still sit at their placement spots, invisible (**verified**, a PC replay's people listing). Which
+people are shown is room state, not save data: a room's setup decides it again from the story flags on every entry,
+which is why a save taken between two parts of a scene can come back with the wrong people shown.
+
 ## Setting people up on room entry (**verified** from `floor.c`)
 For each placement record of the room, a person is opened (or, when the room is **restored** after a pushed room
 pops, the existing one is reused and none of the following runs: menu-rooms.md, "Fresh load or restored?"). Then:
@@ -90,6 +98,11 @@ record's types:
 - **talk end type** (byte 1 bits 4-5): 1 sets people flag 0x40 (**likely** "turns back to its original facing
   after talking"), 0 clears it;
 - byte 0 bit 5: the person **looks at the player** (its head follows them, `std065_characterLookAtPlayer`).
+  Scenes switch it off with `std067_characterStopLookAt` (**verified** from the code: it resets the
+  model's head part and clears the look target), typically right before they leave someone lying or busy: Mt. Battle's
+  valley script stops Vander's look-at before Dakim knocks him down, and calls it on him a second time later in the same
+  scene, so stopping a person that isn't looking is harmless (**verified** from the decoded script). The look-at is not
+  saved: the next room entry starts it again from the placement bit (**likely**, from the entry code above).
 The movement script (+0x10) runs separately (scripted walkers); its trigger is not traced yet.
 
 ## Collision with people

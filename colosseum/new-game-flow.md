@@ -31,11 +31,11 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
    `gs_title_8001EF78.c`): the title is a state machine (`std021_newGameIntroSequence`, state in `gTitleState`,
    `lbl_8047A31C`) that starts the **title song, sound 0x46A** (`std104_soundSetBackgroundMusic(0x46A, 0, 0xFF)`),
    then plays the logo animations (states 0-8), then waits at state 0x20 in the "PRESS START" menu (menu 0x13).
-   After START: state 0x1F (a short wait), state 0xC8 **loads the memory card** (`fn_801D0748(1, 2, 0)`; -1 = back to
+   After START: state 0x1F (a short wait), state 0xC8 **loads the memory card** (`memcardExecTask(1, 2, 0)`; -1 = back to
    waiting; any result but 3 creates an empty save, so 3 is **likely** "a save was loaded"), then state 0x29 **`floorLink(0x3A1, 0)`: the `topmenu` room**,
    where the top menu runs.
 
-   *The memory-card call* (`fn_801D0748(kind, work size, channel)`, `memcard.c`, **verified**; memory-card.md): it starts memory-card
+   *The memory-card call* (`memcardExecTask(kind, work size, channel)`, `memcard.c`, **verified**; memory-card.md): it starts memory-card
    task `kind` as a per-frame task (`GSgappCreate(.., memcardTaskMain)` (0x801CDB04)), allocates a 0x1E600-byte work buffer and a
    0xA000-byte card work area, and **yields until the task reports a non-zero result**. Kind 1 is this title load;
    kind 4 (ten callers, **likely** the normal save) and kind 7 (the options save) are others. Results seen in the task code: **4** after a write
@@ -46,16 +46,16 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
 
    **The title song drives the attract demo:** a per-frame function (`fn_8001EF78`) checks, in every state from
    0x1E on except 0xC8, whether the title song is still playing (`GSsndGetStatus(0x46A)`, 0x801666BC); when it is not, it sets
-   the state to 0x28, and the title's main loop (`fn_800203B4`) then links **room 0x39C, `auto_demo`** (the attract
+   the state to 0x28, and the title's main loop (`titleMain`) then links **room 0x39C, `auto_demo`** (the attract
    demo). So on the GameCube the demo starts when the title song ends. *For the port* (**likely**, from the code, not
    run): if the title song never starts, `GSsndGetStatus(0x46A)` reads 0 from the first frame of state 0x1E, so the
    title leaves for the attract demo right after the logos, or overwrites the state set by START, and the top menu is
    never reached; the title song (or a stand-in that reports "playing") is on the critical path.
 4. **Top-menu room** (0x3A1, `topmenu`): its setup (**likely** `titleIntroStart` (0x80021644), which nothing in the C calls; it runs
-   only when `fn_800FF548` is 0) starts **`worldmap_song`** (sound 0x446; the
+   only when `fn_800FF548()` is 0) starts **`worldmap_song`** (sound 0x446; the
    song's name from the disc's song list), loads the top menu's background model and plays camera animation
    0x632 (the Orre map fly-over behind the menu, **likely**). The top menu itself is `titleMenuMain` (0x800210F0), reached through
-   the wrapper `fn_80021624` (**likely** from the `topmenu` room's data: nothing in `main.dol` calls it).
+   the wrapper `titleTopMenuMain` (**verified**: it is the `topmenu` room's main callback in the room table; nothing in `main.dol` calls it).
 5. **Top menu** (`titleMenuMain` (0x800210F0), menu 0xAA, choice in `lbl_8047A360`):
    - **New Game** (taken when the menu call itself returns 0, **likely** "the first item chosen") -> a confirmation: with no save, a plain "start a new story?" (message 0x3C3A); when a save exists, a
      warning that it will be deleted (0x3C35, or the same warning in another wording, 0x44C9, when
@@ -113,8 +113,10 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
        Advance game (a four-trainer party picker, `fn_800849B4`).
      - **Battle Now** needs no save: Single Battle or Double Battle, then the opponent's difficulty (Ultimate, Hard,
        Normal, Easy), then it offers a **ready-made team** under a trainer name (in the run checked: six level 50
-       Pokémon) with "Would you like to enter with these Pokémon?". Whether "No" offers another team, and how the
-       team is chosen, is not traced.
+       Pokémon) with "Would you like to enter with these Pokémon?". How the teams are chosen (**verified**
+       from the code, battle-mode.md "Battle Now"): both teams are Mt. Battle trainers' teams, drawn from eight per type and rank with the shared random number
+       generator (the player's is a different one of the eight, renamed with one of three names), with every held
+       item removed; "No" goes back, and choosing again draws new teams (**likely**).
      - So a battle with a chosen team needs a Story Mode save (its party) or a GBA game; Battle Now gives fixed or
        random ready-made teams without one.
      - **Registration checks the party against the rules right away** (**verified** on screen
@@ -148,13 +150,40 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
          even on a save from just after Phenac's first visit); the label **glows and sparkles** once that challenge
          has been completed (**verified** in play). So the early "Champ!" is the normal look, not a save problem.
          Where the completion records live is not traced.
-   - **Options** -> choice 4: `titleNewContinueSelect` (0x80020C9C), then back to the menu. It edits the **sound output mode**
-     (`GSsndGetOutputMode`, likely mono / stereo / surround) and save-header option 9, **rumble off**
+   - **Options** -> choice 4: `titleNewContinueSelect` (0x80020C9C), then back to the menu. The screen has three rows:
+     Sound (Stereo / Mono), Rumble (On / Off) and Done, with a help box at the bottom (**verified**, a screenshot of
+     the screen). It edits the **sound output mode**
+     (`GSsndGetOutputMode`; the screen offers only mono and stereo) and save-header option 9, **rumble off**
      (`gamedatasaveBios...OptionNoVibration`). Cancelling restores both. On leaving, if the rumble setting changed
-     and `memcardGetFlag41` (0x801D04E8) holds (the memory-card task state's `serial_check_enabled` flag; what it means is not
+     and `memcardGetFlag41()` (0x801D04E8) holds (the memory-card task state's `serial_check_enabled` flag; what it means is not
      traced), it asks whether to save (message 0x3D82) and
-     saves the options with `fn_801D0748(7, 2, 0)`. (Only option 9 is compared there; how the sound mode is stored, as
+     saves the options with `memcardExecTask(7, 2, 0)`. (Only option 9 is compared there; how the sound mode is stored, as
      save-header option 10 or not at all, is not traced.)
+
+     **How the Options screen is built** (**verified** from the menu and item tables and the screen's code, 2026-11-13;
+     positions in the game's 640 x 480 screen). It is six menus opened together, all data except a few callbacks:
+     - **0x80, the rows:** three row panels (items 0x50E-0x510, sprite 0x197, 627 x 53, at y 116 / 192 / 267, so 76
+       apart); a highlight bar over each (items 0x511-0x513, sprite 0x195), whose callback sets a flag on it when the screen's
+       selection equals that row's number (0 Sound, 1 Rumble, 2 Done; **likely** the "shown" flag) and scales it
+       between 1.0 and 1.2 on a sine (a gentle pulse); a second overlay per row (items 0x514-0x516, sprite 0x196); the three labels as **pictures** (items
+       0x517-0x519: sprite 0x191 "Sound", 0x190 "Rumble", 0x18F "Done", each about 35 high, 13 below its panel's top);
+       and the controller picture (item 0x51A, sprite 0x193), whose callback copies the state record's swing value into
+       it (**likely** its rotation: the controller wiggles when rumble is turned on).
+     - **0x7B, the choices:** the four words as message text (STEREO and MONO on the Sound row, ON and OFF on the
+       Rumble row: message keys 0x1900-0x1903, 14 below their panel's top), and four circle positions (items
+       0x522-0x525, 127 x 41). Its draw callback (`menuOptionDrawSoundMode`) draws the circle sprite 0x192 at the
+       position for each row's current value. Its cursor callback (`fn_80020618`) moves the selection with up / down
+       (0 to 2) and applies left / right to the row under it: Sound sets the output mode, Rumble sets save option 9
+       (and gives a short rumble when turned on).
+     - **0x7D and 0x7E:** the speaker pictures (sprite 0x194), shown as two or one by the current sound mode.
+     - **0x7C:** the "OPTIONS" title bar (sprite 0x263 across the top, y 40, 56 high).
+     - **0x7F:** the help box (three sprites, y 349) and its text, drawn from the selection (`titleDrawOptionHelp`,
+       the message table `lbl_802E4EF0`, one key per row).
+     The selection lives in a small state record (`lbl_803A1FC8`: the selection first, then the rumble-shake and pulse
+     timers). The screen's loop (`titleNewContinueSelect`) reopens menu 0x7B until A is pressed with the selection on
+     Done (2). **Changing it:** a new row needs a panel, a highlight, a label picture and its value items in the tables,
+     the cursor callback's row count, and a help line. The tables are live data, so a port can move and add items at
+     start-up; the row numbers are fixed in the callbacks, so new rows need a hook there.
    - Anything else -> back to the title room (0x384).
 
    **How the top menu's entries are defined** (**verified** from the menu tables in `main.dol` and `titleMenuMain` (0x800210F0)
@@ -170,13 +199,27 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
    - **What each entry launches is code:** a fixed `switch` on the choice in `titleMenuMain` (0x800210F0): New Game (the menu call
      returns 0) -> the confirmation, name entry, save creation and room 0x3A0; 1 Continue -> the save's return point;
      2 / 3 -> `menuColosseumBattle(0)` / `(3)` and room 0x395; 4 -> the Options screen (`titleNewContinueSelect` (0x80020C9C)); any other value
-     (the sixth entry, or cancel) -> back to the title room 0x384 (**likely** the sixth entry is "back"; its label not
-     checked).
+     (the sixth entry, or cancel) -> back to the title room 0x384. (**verified** from a picture of
+     the menu in the port): The sixth entry is labelled **"Quit"**, a small button right of Options; the screen shows
+     the Story Mode panel (Continue, New Game), the Battle Mode panel (Colosseum Battle, Battle Now), Options and Quit,
+     with a help line under them ("Continue the Story Mode from where it was last saved.").
    - So a mod can move or restyle entries and change their help text by data, but a new entry, or a new target for an
      existing one, needs a new case in that `switch`.
+   - (**verified**, from the tables in `main.dol` and the menu code): **the pieces and the glove.**
+     The Story and Battle panels are 269 x 249 at (43, 43) and (330, 43); OPTIONS is one picture 209 x 65 at
+     (182, 288), its word and controller drawn in; Quit is one picture 143 x 50 at (448, 296), **its word part of the
+     pellet**. The six selectable entries are invisible positions for the **glove**: the selected entry's cursor
+     sprite (the glove, 70 x 46, with its own small animation) is drawn at that entry's position, so the glove's
+     places are New Game (40, 233), Continue (42, 198), Colosseum Battle (288, 198), Battle Now (319, 234), Options
+     (125, 297) and Quit (395, 297). **Moving the cursor** is the menu system's general rule, not code of this
+     screen: a direction picks the nearest selectable entry that way (left / right look first within 12 px of the
+     same height, up / down within 16 px of the same column, widening until one is found), so an entry added to the
+     chain is reachable with no new code, and its choice number is its place among the selectable entries. **The
+     help table has exactly six slots**, one per entry; the Options screen's table follows it in memory. The menu
+     returns the choice; the help box is a separate menu (0x7F) drawn while it waits.
 
 6. **Opening movie** (room 0x3A0): `movieOpeningStart` fades, opens `movie/openingdemo.thp` and starts its song
-   (0x495); `fn_80035E04` plays it with five frame-keyed sound cues, then writes story flag 0x8D0 and
+   (0x495); `movieOpeningPlay` plays it with five frame-keyed sound cues, then writes story flag 0x8D0 and
    **`floorLink(1, 0)`**: room 1, **`S1_out`, Outskirt Stand**, entry point 0. It also sets the room change's fade
    script to `0x05960008` (`floorSetFadeScript`; **verified**), the shared fade-in that the
    battle code also uses when returning to the field (`fight.c`), so it is a generic fade, not a call to the
@@ -184,16 +227,16 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
    from `main.dol` (the link keeps them with FORCEACTIVE), so the `opening_demo` room reaches them through its own data.
    (**verified** from the room table's relocations in `common_rel`): They are the room
    record's **C pre / main / post functions** (+0x3C / +0x40 / +0x44): room 0x3A0 = `movieOpeningStart` /
-   `fn_80035E04` / `fn_80035DD4`. The same holds for every front-end room:
+   `movieOpeningPlay` / `movieOpeningExit`. The same holds for every front-end room:
 
    | Room | Pre (on entry) | Main (every frame) | Post (on leaving) |
    |---|---|---|---|
-   | 0x399 `pokemon_logo` | `movieTpcStart` | `movieTpcWait` | `fn_800365B0` |
-   | 0x39A `genius_logo` | `movieGsLogoStart` | `movieGsLogoWait` | `fn_800363BC` |
-   | 0x384 `title` | `fn_8002049C` | `fn_800203B4` (the attract-demo check) | `fn_80020328` |
-   | 0x39C `auto_demo` | `movieStartAttract` | `fn_80036240` | `fn_80036210` |
-   | 0x3A0 `opening_demo` | `movieOpeningStart` | `fn_80035E04` | `fn_80035DD4` |
-   | 0x3A1 `topmenu` | `titleIntroStart` (0x80021644) | `fn_80021624` | `fn_800215C4` |
+   | 0x399 `pokemon_logo` | `movieTpcStart` | `movieTpcWait` | `movieTpcExit` |
+   | 0x39A `genius_logo` | `movieGsLogoStart` | `movieGsLogoWait` | `movieGsLogoExit` |
+   | 0x384 `title` | `titleInit` | `titleMain` (the attract-demo check) | `titleExit` |
+   | 0x39C `auto_demo` | `movieStartAttract` | `moviePlayAttract` | `movieExitAttract` |
+   | 0x3A0 `opening_demo` | `movieOpeningStart` | `movieOpeningPlay` | `movieOpeningExit` |
+   | 0x3A1 `topmenu` | `titleIntroStart` (0x80021644) | `titleTopMenuMain` | `titleTopMenuExit` |
 
    So the **tpc movie is played by room 0x399 `pokemon_logo`**, and the top menu's
    setup is `titleIntroStart` (0x80021644). A room's script functions run in the same three phases (step 7).
@@ -201,7 +244,7 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
    disc). On entry the script checks story flag **986**: while it is clear (the first arrival) it starts no music
    (`null_bgm_song`); later visits play `stand_song` once flag 2480 is set. The room setup (function 1) only shows or
    hides characters by flags 986 and 990. The **first-arrival cutscene** is the script's function 8, started by the room's **main loop
-   (function 11**, which calls `heroMoveMain` every pass; **verified** from the script's bytecode). The loop calls
+   (function 11**, which calls `heroMoveMain()` every pass; **verified** from the script's bytecode). The loop calls
    function 8 when flag 986 is clear and the player (character group 0, id 100) is inside a box
    (`std058_characterCheckWithinBounds(0, 100, -45, -45, 0, 40)`: the floor rectangle from corner x -45, z -45 to corner
    x 0, z 40, **verified** from `people.c`; with the game's debug resource flag on, the check also draws the box as
@@ -243,7 +286,7 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
      functions: queue 1 with the room's pre-function, queue 2 with its main function and the floor update, queue 3
      with its post-function (`fn_800FEF8C` / `fn_800FEE68` / `fn_800FED3C`, **verified** pairing). So +0x30 is
      **likely** the "on entry" script, +0x34 the room's **main loop** (S1_out's function 11 loops on
-     `heroMoveMain` forever, which fits) and +0x38 the "on leaving" script (function 3 stops sounds, which fits).
+     `heroMoveMain()` forever, which fits) and +0x38 the "on leaving" script (function 3 stops sounds, which fits).
    **The shop** (`S1_shop_1F`, room 2; **verified** from its decoded script and room record):
    - Its room record names script functions 0, 1, 2, 4, 3 (+0x28 .. +0x38), so function 4 is the shop's **main
      loop** and function 3 its **on-leaving** script (the one that sets flag 988, the Willie trigger).
@@ -282,15 +325,67 @@ map. Moving on is a room change (`floorRequestChange(room)` or `floorLink(room, 
    flags (**likely** a rematch; its trainer record, 11, has a Zigzagoon at 29 and a Linoone at 30). For battle 10 the arena's room is **0xC8, `S1_out_bf`** (arena 5), the battle copy of the
    Outskirt Stand map (battle-arenas.md, "Battle rooms").
 
-For comparison: after the staff roll, `fn_80035F64` (when the previous room was 0x76 and flag 0x476 is set) sets
+For comparison: after the staff roll, `movieStaffrollMain` (when the previous room was 0x76 and flag 0x476 is set) sets
 flag 0x478, puts the save header's return point at room 2 entry 1, sets the partner-following flag, saves, and links
 to room 2 (`S1_shop_1F`, entry 1), the Outskirt Stand shop: the post-game starts there.
+
+## The save and load screens, as the player sees them 
+
+Captured screen by screen in the PC port (the decompiled code running natively) build, which runs the game's own code. **Verified** from pictures of each step;
+message keys are from the US disc's banks, and each message is described here, not quoted.
+
+- **Starting with no save on the card** (the title, then START):
+  1. the game says it found no Colosseum save file on the card in Slot A (key 0x3BFA, first part);
+  2. it asks whether to create one (the same message's second part), with a YES / NO box, the cursor on YES;
+  3. it reports the file was created in Slot A (0x3BFD; creating it is the burst of about 1,000 random draws,
+     random-numbers page);
+  4. the main menu opens with the cursor on New Game; the help line says the story starts from the beginning.
+- **Starting with a save on the card:** the game says the card in Slot A was read, then opens the main menu with the
+  cursor on Continue (help: continue from where you last saved).
+- **New Game from the main menu:**
+  - with a story save on the card, it warns that a new game deletes the current save file on the card in Slot A and
+    asks if that is okay (YES / NO, the cursor on NO);
+  - with only the empty file (just created), it simply asks whether to start a new story (the cursor on NO);
+  - then the name screen: a list (New Name and three ready-made names), and New Name opens the letter grid (seven
+    letters; capitals, digits and symbols, X for lower case, R to switch case, B back, START done).
+- **Saving in the game** (at a PC; **verified** from the code, `pcMenuSave`; pictures not captured yet):
+  1. a save window opens (menu 0x28) with the save prompt (key 0x3C01) and the play time filled in (the Time
+     control code), and a YES / NO box, the cursor on YES;
+  2. NO (or B) closes it; YES reads the card's save first (card task kind 3) to compare it with the game in memory;
+  3. if the card holds a save of the same player (the same hero id) or the game has never been saved, it asks
+     whether to overwrite the current save file (key 0x1B60), the cursor on NO; NO goes back to step 1. The time
+     spent on this question is taken out of the play time;
+  4. it sets the save's return point to the current room and writes (task kind 4), which shows the "saving, don't
+     touch the card" and "saved" messages (keys 0x3C04, 0x3C06) from the card task itself.
+- **Every flow that touches the save** (from the card tasks' callers, memory-card.md "Task
+  kinds"; **verified** for the callers, the screens of D-H not yet captured):
+  - A, start-up: read the save (kind 1); with none, offer to create it (the first-save create);
+  - B, the main menu: Continue (asks whether to continue from the last save) or New Game (the two warnings above),
+    then the name screen;
+  - C, saving in the game: ask, read the card's save for the overwrite check (kind 3), ask to overwrite, write
+    (kind 4), report;
+  - D, after the staff roll: the same save (kinds 3 and 4), with the return point set to the post-game start;
+  - E, the Options screen: if rumble changed, ask whether to save it (kind 7); captured: leaving with Done after a
+    rumble change asks whether to save the settings to the card in Slot A (key 0x3D82), the cursor on NO;
+  - F, Battle Mode: saves from a temporary save image (kinds 5 and 6). **Verified** from `menuColosseumBattle.c`:
+    after a Colosseum Battle run that earned Poké Coupons, it asks whether to save (key 0x3C03, the cursor on YES);
+    NO asks again with a warning (0x3D54, the cursor on NO), and declining there takes the coupons just won back
+    off; registering Pokémon for Battle Mode is saved too (kind 5);
+  - G, trading: the card and the GBA Game Pak saved together (kind 8);
+  - H, the error screens any of them can show: no card, a corrupted card or one to format, a device that isn't a
+    card, too little free space, a failed save, then "continue without saving?".
+  
+- **The card wording** (verified, a search of the US banks): about 35 system messages in the shared bank
+  (`common_rel` bank 5, keys 0x1771-0x17A6, 0x1B5D-0x1B60 and 0x3BFA-0x3C06) name the memory card, Slot A / B,
+  formatting, free blocks and "don't touch the POWER Button". The e-Card tool's bank and the trading menu have their
+  own. Each is a message key, so a PC wording can replace them through the message hooks
+  without touching the game's code.
 
 ## Story flags on the way (meanings from where each is set, so **likely** unless noted)
 
 | Flag | Set by | Meaning |
 |---|---|---|
-| 0x8D0 (2256) | the opening movie's end (`fn_80035E04`) | the opening movie has been shown (**verified** as its setter) |
+| 0x8D0 (2256) | the opening movie's end (`movieOpeningPlay`) | the opening movie has been shown (**verified** as its setter) |
 | 986 | `S1_out` function 8 | the Outskirt Stand arrival cutscene has played (gates it; **verified** from the script) |
 | 988 | `S1_shop_1F` function 3 (leaving the shop) and a shop talk | the player has been in the shop; makes the main loop start the Willie battle (**verified**) |
 | 989 | `S1_out` function 9, before the battle | the first battle (Willie) has started |

@@ -117,6 +117,13 @@ not a separate system. **Verified** from the decoded US room scripts unless mark
 | Team Snagem hideout (revisit) | the first-floor hall | 6 drop-ins (animation 53); one routine picks which of the six appears from the story state (the choice rule is not read yet) | one shared routine |
 | Agate Village, the Relic Cave | first cave room | 1 ambusher who jumps out with a different entrance (animation **18**) and walks off after the fight | a trigger zone |
 
+**Entering the room inside a zone** (**likely**): the zones are checked from the room's main loop,
+so a player who comes into a hideout room already standing inside a zone (not walking into it) meets the next
+ambusher at once, before taking a step. On a GameCube that can't really happen (rooms are entered at their doors);
+a port or mod that lets the player save anywhere can do it: a save made right where an ambush was fought, continued
+later, starts another of the hideout's drop-ins straight away (seen four times in a replay of a recorded play session,
+each a battle the original session never had there). 
+
 **They don't start any of the untraced battles.** Every ambush names its battle numbers directly in the script; those
 numbers are all already traced, and none is among the 72 above. The Lab ambushers do own six of them (family 2 above),
 as versions their scripts never pick.

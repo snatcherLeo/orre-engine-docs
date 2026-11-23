@@ -8,7 +8,7 @@ Shadow Pokémon Lab's DNA samples. Code: `src/game/floor.c` (room setup), `src/g
 (`floorEventCtrlTresure`, `floorEventGetTresure`, `floorEventChangeTresure`), the Lab's room scripts.
 **Verified** from the decomp's C, the decoded US scripts and the US treasure table unless marked.
 
-## Data: the treasure table (`common_rel`, `lbl_80478EBC`, 74 records of 28 bytes; game-data-tables.md (not yet published))
+## Data: the treasure table (`common_rel`, `floor_tresure_list`, 74 records of 28 bytes; game-data-tables.md (not yet published))
 
 | Offset | Field |
 |---|---|
@@ -37,7 +37,7 @@ work the same way: three collected flags, each shared by four records, one per l
 |---|---|
 | 1 | an item: "found <item>" then "put it in the bag"; if the bag pocket is full, the rest goes to the **PC** with its own message |
 | 2 | **money**: the amount is the item field (no US record uses it) |
-| 3 | an **Ein File** (items 538-541, 547): it goes to the bag, then the game asks whether to read it now; yes shows the file's text |
+| 3 | an **Ein File** (items 538-541, 547): it goes to the bag, then the game asks whether to read it now; yes shows the file's text. The question and text ids for the five files are written into this code; reading from the bag later uses a separate 5-row table of {item, text} with the same texts (bag-and-pc.md) |
 | 4 | like 1 without the "found" line (used by a script native that gives items through the same path) |
 
 ## Flow

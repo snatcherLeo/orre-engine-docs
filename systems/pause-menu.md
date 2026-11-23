@@ -56,7 +56,9 @@ proposed names). Nothing is saved.
 
 Variable 0x8AE (`FLAG_system_gamemode`, its original name from an assert string) holds the **game mode**: 0 = story,
 1 or 2 during a Battle Mode run (**likely** single or double battles: a helper picks 2 or 4 Pokémon from the same
-setting). **Verified** from the code, assert strings and the decoded room scripts unless marked.
+setting; **verified**, 1 single and 2 double, set only by Colosseum and Mt. Battle runs; Battle
+Now and Gang battles never set it, battle-mode.md). **Verified** from the code, assert strings and the decoded room
+scripts unless marked.
 - **Values:** the Battle Mode menu asserts it is 0 (story) on entry; starting a Battle Mode run sets it to 1 when the
   battle type (save section 14 +0x04) is 0, otherwise to 2; leaving the Battle Mode menu (`menuColosseumBattleExit`)
   sets it back to 0. Both Battle Mode kinds set it: Colosseum battles and Mt. Battle 100. Battle Mode's Mt. Battle
@@ -77,9 +79,43 @@ setting). **Verified** from the code, assert strings and the decoded room script
 ## Disc data
 The dialogs (menu ids 0x41 and 0x109) are entries in the menu tables (menus.md (not yet published)).
 
+**what the menu looks like on screen.**
+- **The entry names are text, not pictures** (**verified** 2026-11-15 from the code and the US, European and Japanese
+  text: each of the menu's item records carries its message key, POKéMON 0x136, P★DA 0x138, ITEMS 0x137 and EXIT
+  0x13A, and the menu's draw step prints them in font 0; the Italian text bank picks font 3 for them instead). The US game's shared text bank (`common_rel`)
+  holds the three labels POKéMON, ITEMS and P★DA (entries 0x136-0x138, so the US menu says POKéMON and ITEMS rather
+  than "party" and "bag"), each starting with the font-switch code for font 0, the main 22 px font (fonts.md). A
+  fourth label, **EXIT** (0x13A, same font code), comes right after them and closes the menu (**likely**: it matches
+  the frame's fourth area below and the code's "any other choice leaves", and players remember an exit entry).
+  **B closes the menu** (**verified** 2026-11-15: the shared menu routine's B branch returns "no choice", and the
+  pause menu then leaves); Start does not.
+- **On screen** (**verified**, a screenshot of the running game in Dolphin): **four separate rounded buttons** stacked
+  down a metal rail on the right, in the order **POKéMON, P★DA, ITEMS, EXIT** (the order of the code's choices: 0
+  party, 1 P★DA, 2 bag, then leave; the text bank's order is different). The rail has one notch beside each button.
+  The **chosen** button slides out to the left and its text turns **bright green**; the others sit back with dimmed
+  text.
+- **The art** (**verified**, decoded and viewed): texture `menu_040` in `field_common.fsys` holds a rail piece with
+  notches and one rounded button panel. **Each button and each rail piece is its own menu item** (**verified**
+  2026-11-15, from the menu data): the rail grows by one middle piece, 43 pixels tall, per button, so the buttons sit
+  43 pixels apart (the challenge-run dialog 0x109 builds its shorter rail the same way). A fifth button fits a 640 x 480
+  screen (at y 95, 138, 181, 224 and 267). The labels are drawn onto the
+  buttons by the text system.
+- So a translation changes the words without touching any picture, and an added entry likely needs only a new item
+  record (with its own button drawn like the others), plus new art only if the rail has to grow (below).
+
 ## Changing it
 - New pause-menu entries: the dialog's items are menu-table data, but the choice is handled by the fixed `if`
   chain in step 3 (code). A port mod adding an entry (options, a quick save) would extend that chain.
+  Each entry is its own button on the rail, so a fifth entry is one more button drawn
+  from the same pieces, and its label is one more text line in font 0. Verified (above): the
+  rail grows by one 43-pixel piece per button, so **no new art is needed**.
+- **Where a save puts you back** (**verified** 2026-11-15): saving at a PC stores the game's **return point**, which is
+  where Continue starts **and** where a whiteout sends the player; only the script command run at a PC sets it. So a
+  save made away from a PC (a port's "save anywhere") still continues at the last PC used, unless the port keeps the
+  exact spot itself. Setting the return point to the current room instead would also send whiteouts there, so a port
+  shouldn't.
+- **The PC menu** the pause menu could open is a menu room of its own (the PC box menu: Pokémon Storage, Item
+  Storage, Save, Exit), likely opened the same way the pause menu opens the P★DA.
 - The open buttons are in the hero movement code (mask 0x1C00).
 - Because NPCs freeze through `gFieldMenuIsOpen`, any new field overlay that should stop the world can set it.
 

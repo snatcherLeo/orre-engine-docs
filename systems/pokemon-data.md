@@ -257,6 +257,12 @@ Dark = Shadow, Dp = heart gauge (battle-shadow.md), Tamago = egg, Fusei = illegi
   +0x0D0 mail id, +0x0D6 trainer-party data id, **+0x0D8 Shadow species data id, +0x0DC heart gauge
   (`dp`, s32), +0x0E0 stored EXP, +0x0E4 stored friendship**, +0x0E8 attest2 (0x10),
   +0x0F8 event flags.
+- **the PC box marks (+0x0CF)** are one byte, one bit per shape. The Mark menu (window 157: circle,
+  square, triangle, heart, Confirm, Cancel) toggles the row's bit from a four-byte table read in memory order, 01 02
+  04 08, so circle = bit 0, square = bit 1, triangle = bit 2, heart = bit 3 (**likely**, from the table and the menu's
+  row order; the console's frames will confirm). The menu edits a copy and writes it back only on Confirm; Cancel
+  returns 0xFF and leaves the marks as they were (`fn_8005D738`, verified from the code). The same menu marks
+  Pokémon on the Colosseum-battle team screens. The GBA transfer copies the byte as it is.
 - **Size discrepancy (open):** the struct covers 0xFC bytes, but the save's party slots are 0x138
   bytes each (`HeroSaveData`, `save-data.md`): 0x3C bytes per slot are unaccounted for. In a real save those
   bytes hold run-time addresses (the console's 0x80… RAM addresses) and differ between two saves of the same play,
@@ -271,7 +277,7 @@ Dark = Shadow, Dp = heart gauge (battle-shadow.md), Tamago = egg, Fusei = illegi
 | Table | Getter | Base / count | Entry | Layout |
 |---|---|---|---|---|
 | Species | `pokemonDataBiosGetPtr(id)` (0x8011E778) | pointer `lbl_80478F94`, count `lbl_80478F90[0]` | **0x11C** bytes | `PokemonData` in `include/game/pokemon_data.h` |
-| Moves | `wazaDataBiosGetPtr(id)` (0x8011CA34) | pointer `lbl_80478DFC`, count `lbl_80478DF8[0]` | **0x38** bytes | not yet named; an out-of-range id returns entry 0 instead of NULL |
+| Moves | `wazaDataBiosGetPtr(id)` (0x8011CA34) | pointer `waza_data`, count `waza_data_number[0]` | **0x38** bytes | not yet named; an out-of-range id returns entry 0 instead of NULL |
 | Items | `itemDataBiosGetPtr(id)` (0x801440A0) | id -> slot through the static map `lbl_803681E8`, then a count check (`lbl_80478BD8`, `lbl_80478BB0`) | ? | not yet named |
 
 `PokemonData` (species entry, 0x11C): growth rate, catch rate, gender ratio, EXP yield, base
@@ -280,11 +286,25 @@ category and Pokédex text, seen/caught flag ids, **model id (`pkxDataId`)**, 2 
 TM/HM compatibility bytes (0x3A), 2 held items, 8 egg moves, base stats, EV yields, **5 evolutions**,
 **20 level-up moves** (`{level, move}`), and 2 face/body entries (colour, menu sprite, body id).
 
+What some of those fields hold (read from the US disc):
+- **The category** ("Seed" in "Seed Pokémon", the message id at +0x1C) is in the **P★DA menu archive's message bank**
+  (`pda_menu.fsys`; 275 of the 276 ids), not in the three banks of the common archive (**verified**).
+- **The Pokédex text** (+0x20): **every species has the same id** (one distinct value across the table; **verified**),
+  so Colosseum likely has **no per-species Pokédex entries** (**likely**).
+- **Height and weight** (+0x0A, +0x0C) are stored in **US units**: feet and inches, and tenths of a pound. Bulbasaur 204
+  and 152 = 2'04" and 15.2 lb; Venusaur 607 and 2205 = 6'07" and 220.5 lb (**likely**: they match the official values).
+
 **The species order** (**verified** from the US table): 413 entries in **Gen 3's internal order**
 (not the National Pokédex order): 0 is empty, 1-251 are Bulbasaur to Celebi, **252-276 are 25 empty entries** (the
 same gap Gen 3 has), 277-411 are the Hoenn species, and 412 is Gen 3's egg slot. The empty entries are the natural first
 place for new species without widening any table (**likely**: the other per-species tables must accept those indices
 too).
+
+**The Egg** (**verified** from the code and the disc): slot 412 has its **own battle model** (model
+id 412, a textured egg in three parts with palette textures; the developers' move viewer draws it). The code knows eggs
+in several places: each Pokémon record's egg flag (status selector 0xB6), an egg picture for menus (id 0x33D), the
+party menu refusing an egg ("An EGG can't be selected."), and an NPC event's text skipping eggs. Colosseum has no
+breeding or hatching; which screen shows the egg's 3D model is unknown.
 
 **Reading species numbers: the internal order is not the National Dex** (**verified** against the
 US disc's name table). Every species number the game stores or passes around (party and battle records, trainer
@@ -337,8 +357,31 @@ TM/HM), +0x01 key item, +0x02 usable, +0x04 effect parameter, +0x06 price, +0x08
 +0x14 description message id, +0x18 buffer/extra id, +0x1C field-use function id, +0x20 battle-use
 function id, +0x24 friendship change per use (3 brackets, s8). Items are looked up through a
 **static id -> slot map** (`lbl_803681E8`), so item ids and table rows are not the same. Berries are
-item ids 0x85-0xAF (`itemDataBiosGetKinomiNo`). **TM table** `lbl_80368018[machineNo].wazaId`
-gives each TM/HM's move (count `lbl_80478BD0`).
+item ids 0x85-0xAF (`itemDataBiosGetKinomiNo`). **TM table** `item_waza_machine_no[machineNo].wazaId`
+gives each TM/HM's move (count `item_waza_machine_no_number`).
+
+**Item-use handlers** (**verified** from the item table in the executable, where +0x1C and +0x20
+hold the handlers themselves): +0x1C is what using the item from the bag does, +0x20 what using it in battle does
+(empty = can't be used there). Most handlers sit in one source file, which XD keeps under the name `menuUseItem.c`;
+its second half has the same order as XD's, so those handlers carry XD's names:
+
+| Handler | Used by |
+|---|---|
+| `menuUseItemRecovery` | Potions, status heals, Revives and the vitamins (bag), the same items in battle, plus the Yellow / Red Flute in battle |
+| `menuUseItemPPRecovery` | Ether, Max Ether, Elixir, Leppa Berry (bag and battle) |
+| `menuUseItemWPointUp` | PP Up, PP Max (*WPoint* = "waza point", PP) |
+| `menuUseItemListLVUp` | Rare Candy |
+| `menuUseItemAlldeathRcv` | Sacred Ash (revives every fainted party member) |
+| `menuUseItemEvolution` | the evolution stones |
+| `menuUseItemCologn` | the three Scents (XD's "cologne"; it queues the script that runs `std163_useCologne`) |
+| `itemFieldUseTM` | the TMs and HMs |
+| `itemFieldUseCheckUsableList` | the key items: usable only while the item is on a short "usable now" list (up to 8 items, in `lbl_803A1B90`); otherwise "This item can't be used now." What fills the list is open (**likely** a script call) |
+| `itemFieldUsePlayTimeFlute` | the Time Flute (checks the same list, then purifies Shadow Pokémon) |
+| `itemFieldUseReadEinFile` | the five Ein Files (shows the file's text) |
+| `itemBattleUseApplyXItem` (battle only) | the X items, Guard Spec and Dire Hit |
+| `itemFieldUseBall` (battle only) | the Poké Balls |
+| `itemFieldUseNotNow` | items with no use from the bag (valuables, many Berries; the X items' bag slot) |
+| `itemFieldUseForbidden` (bag and battle) | Black / White Flute, the shards, Repels, Poké Doll, Fluffy Tail and others: **likely** the items that have no purpose in Colosseum (no wild encounters) |
 
 All three bases are **pointers filled at runtime** (the tables come from disc data, not the
 executable). They live in the REL module `common_rel` (`common.fsys`); its prolog fills the
@@ -350,14 +393,28 @@ the module's 47 tables: game-data-tables.md (not yet published).
 
 - Each species has a **model id** (`pkxDataId`, selector 0x66); models are PKX files, floor
   resource type 15 (`floor-resources.md` (not yet published)).
-- **Portrait (face) cache** (`gs_range_80109C88.c`: `fn_8010BD6C` registers a face, `menuPokemonModelIsLoaded` (0x8010A210)
-  tests whether a cached face fits a Pokémon): a cached face is reused only if it matches the model
-  id, a **Shadow variant** code (0x87 or 0x25 when the Pokémon is Shadow, depending on status
-  `pokemonIsJoutaiDataId(pokemon, 0x3E)` at 0x80121ADC; 0 otherwise), the **personality value** (selector 0x6F: decides
-  shininess and patterns) and selector 0xC1 (meaning open). So portraits are rendered per individual,
-  not per species: a model/avatar swap must also invalidate this cache.
+- **Menu 3D-model cache** (`gs_range_80109C88.c`: `menuPokemonModelIsLoaded` (0x8010A210) tests whether a loaded
+  menu model fits a Pokémon): a loaded model is reused only if it matches the model id, a
+  **Shadow effect** code (0x25 for a Shadow Pokémon (selector 0xC2), 0x87 when it is also in Hyper Mode (status 0x3E);
+  0 otherwise: the effect sequence the menu model plays, textures.md), the **personality value** (selector 0x6F: decides
+  shininess and patterns) and **selector 0xC1 = is shiny** (**verified**: it is passed as the shiny variant to
+  `wazaSequencePokemonCreate`). So menu models are made per individual, not per species: a model/avatar swap must also
+  invalidate this cache.
+- **Cry ids** (**verified** on all 386 species of the US table): a species' cry id (+0x0E, `voice`) is always its
+  **National Dex number + 569** (Bulbasaur 570 ... Deoxys 955). So a new species' cry id follows the same rule, and a
+  cry beyond the 386 needs new ids past 955.
 - **Forms (verified from the disc's archive index, 2026-10-15):** species whose forms look different have one model
-  archive per form: Castform has four (`pkx_powalen` plus `_f`, `_i`, `_w`), Unown one per letter (`pkx_unknown_e` ... `_z`, `_ex`, `_qu`). **Deoxys has only one model**: archive
+  archive per form: Castform has four (`pkx_powalen` plus `_f` sunny, `_w` rainy, `_i` snowy; **verified** by
+  rendering them), Unown one per letter (`pkx_unknown_e` ... `_z`, `_ex`, `_qu`).
+  - **Castform's weather forms are not species rows** (**verified**): the species table has one Castform (index 385). The weather looks are entries of the Pokémon-model table
+    (`lbl_80370BD0`), 0x19F, 0x19E and 0x1A0 for the battle's forms 1, 2 and 4 (chosen in
+    `fightOutPokemonCreateSequence`). They have **no mug shots or PC pictures of their own**. They do have **their own
+    move versions** in the per-Pokémon move-animation table (**verified**): the base model, Attract;
+    sunny, Sunny Day and Attract; rainy, Rain Dance and Attract; snowy, Hail and Attract. The learnset is the
+    species', shared by every form.
+  - **Unown's letters** (**verified**): 28 forms (`lbl_80478CF0` = 28), each with its own mug shots
+    (`lbl_8035B478[form][shiny]`), PC pictures (`lbl_802676F0[form][shiny]`) and model (`lbl_80374E40[form]`, an archive
+    id and entry id). The species record itself points at no mug shot sheet. **Deoxys has only one model**: archive
   `pkx_deoxys` (archive id 0x0386, one entry `deoxys`, entry id 0x070A1E00) plus the shiny `pkx_rare_deoxys` (0x077E,
   entry id 0x128B1E00), and one species-table entry, so there are no Attack / Defense / Speed Forme models or stats in
   Colosseum (likely shown as Normal Forme even when traded in). The entry id is the u32 at the start of
@@ -392,9 +449,9 @@ the module's 47 tables: game-data-tables.md (not yet published).
     switch or compare on Deoxys's species number (the four `case 0x19A` hits in menu code are copies of the battle-mode
     rule; the GBA-screen ones are on-screen element ids); the battle's Pokemon-model table has one Deoxys model that no
     other entry shares; and the model loader's **variant override table** (`lbl_80374F20`, 35 species, used by
-    `fn_801DE190` when its variant argument is set, which the battle sets from "is shiny") has one Deoxys entry, its
+    `wazaSequencePokemonCreate` when its variant argument is set, which the battle sets from "is shiny") has one Deoxys entry, its
     shiny model. Colosseum picks a different model per species only for shininess, Unown's letter (its own table) and
-    Castform's weather forms (their own species-table rows).
+    Castform's weather forms (their own entries in the Pokémon-model table, not species rows).
   - *The "pkx_deoxys_atk" file table (2026-10-16, checked for a table shared on Discord):* the table maps species 408
     Latios, 409 Jirachi, 410 Deoxys -> `pkx_deoxys_atk.fsys` (file id 0x386; model inside still the Normal Forme), 411
     Chimecho (`chirean`), 412 Egg. **On the Colosseum (USA) disc there is no `pkx_deoxys_atk`** (*verified*: all 1,852
@@ -423,7 +480,10 @@ entries), searched by name (**likely**: a model with an unhelpful name could sti
   (`M2_enter_1F`, `M2_enter_1F_2`, `M4_enter_1F`, `M4_enter_B1`), two Realgam Tower rooms (`D4_tower_2F_2`,
   `D4_dome_5`) and three other rooms (`M2_building_1F`, `M2_cave_1F_1`, `M3_houseD_1F`). These are the places where the
   party is healed, so the models are **likely** the balls shown on the healing machine (which ball appears would
-  follow each party Pokémon's ball).
+  follow each party Pokémon's ball). It does. A party in mixed balls showed
+  mixed balls on the healing machine, and leaving Entei (caught in a Master Ball) at the day care put a **small Master
+  Ball on the counter**. The ball shown there is the same model as in battle (wzx.md, "the same file everywhere"). So
+  this is **likely** the game's own behaviour, seen on the PC port; not yet traced in the code.
 - **In battle**, each ball type has its own move-effect sequences (`wzx_<ball>_in`, `_out`, `_open`, `_downin`;
   **verified** names): the ball thrown, opening and the Pokémon coming out or going back. Whether those sequences carry
   their own ball model or reuse the field one is **likely** the former (move effects embed their models, wzx.md),
@@ -563,6 +623,28 @@ is used and written back at the end.
 - **Portraits and body pictures**: `poke_face.fsys` and `poke_body.fsys` (textures.md); **models**: one PKX archive per
   species (models-animation.md (not yet published)); **cries**: the MusyX cry groups (music.md (not yet published)).
 - **Individual Pokémon** are save data, not disc data (save-data.md).
+- **Colosseum's species values are Gen 3's** (**verified**, all 386 species compared with a public
+  Gen 3 data set): base stats and types match exactly for every species. Abilities match too, apart from two
+  harmless quirks: Air Lock's id is 77 here and 76 in public lists (Gen 3's own numbering keeps an unused slot at 76),
+  and Granbull, Vibrava and Flygon list their one ability in both ability slots (no effect: both slots give the same
+  ability).
+- **The rest of the species and move tables are Gen 3's too, specifically Ruby and Sapphire's** (**verified** by the same comparison, every species field and the move table):
+  - **Level-up moves:** identical to Ruby / Sapphire for all 386 species. Where Ruby / Sapphire, Emerald and FireRed /
+    LeafGreen differ (60 species), the disc follows Ruby / Sapphire every time; the one place Emerald differs from
+    Ruby / Sapphire, Deoxys, the disc has Ruby / Sapphire's Normal Forme moves.
+  - **TM and HM compatibility, egg moves, held items, growth rates, gender ratios, base friendship:** all identical.
+    There is **no move-tutor table** in the species record (its machine bytes cover TM01-50 and HM01-08 only), so tutor
+    moves aren't part of Colosseum's own data.
+  - **Catch rates and effort values:** the few differences from today's public values are changes made in later
+    games (Kyogre and Groudon 5 and Rayquaza 3 here; Raichu's, Alakazam's, Electrode's and Delcatty's effort values);
+    the disc keeps the Gen 3 numbers (**likely**: the public data records those later changes only partly).
+  - **The move table** (moves 1-354): power, accuracy, PP, type and priority are Gen 3's. Every difference from
+    today's public data is either how Gen 3 stores a value (variable-damage moves have power 1; moves that never miss
+    store accuracy 100; Curse is the "???" type; Protect, Detect and Endure have priority 3) or a later game's change
+    (Softboiled, Rest, Milk Drink and Slack Off at 10 PP, Luster Purge at 70 power). Moves 355 and up are Colosseum's
+    own (Shadow Rush).
+  - **Why Ruby / Sapphire and not Emerald:** Colosseum came out (Japan, November 2003) before Emerald (September 2004),
+    so its tables were taken from Ruby / Sapphire (the release order is public; that this is the reason is **likely**).
 
 ## Efficiency
 

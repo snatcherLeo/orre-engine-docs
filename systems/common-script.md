@@ -17,18 +17,18 @@ current room's script); the hero-event table (594 records) mostly calls this one
 | Function | What it does | Used by |
 |---|---|---|
 | 0, 1, 2 | do nothing (return 1) | default slots |
-| 3 | a minimal **main loop**: calls `heroMoveMain` forever | rooms without their own loop (**likely**) |
+| 3 | a minimal **main loop**: calls `heroMoveMain()` forever | rooms without their own loop (**likely**) |
 | 4 | **exit**: `floorLinkWithSE` with the record's three arguments (**likely** room, entry point, sound; Phenac Stadium's exit passes room 13) | walk-through planes at room edges (hero-event kind 1) |
 | 5 | **door**: `floorEventCtrlDoor(current room, door number, 0)`: if the door's lock flag allows it, sets its open flag, removes its collision and plays its open animation and sound (by door type); it does **not** warp: the exit plane behind the door does (function 4) | door planes (hero-event kind 2, a running door number per door) |
-| 6 / 7 | an **animated warp** (elevator, lift): faces both characters forward, plays the door object's animation, fades out, queues function 7 as an auto-event and links to the target room; function 7 runs on arrival and plays the matching "arrive" animation and fade-in | lifts in later areas (**likely**) |
+| 6 / 7 | an **animated warp** (elevator, lift): faces both characters forward, plays the door object's animation, waits **(the animation call's result ÷ 100) − 0.5 seconds**, fades out (verified from the script; on the console the Under's lift returns 120, so 0.7 s, measured in Dolphin), queues function 7 as an auto-event and links to the target room; function 7 runs on arrival and plays the matching "arrive" animation and fade-in | lifts in later areas (**likely**) |
 | 8 / 9 | **fade in** / **fade out** over 0.5 s (`fadeSet(2 / 3, 0.5)`) | the room-change fade script: `0x05960008` after the opening movie and after a lost battle's warp |
 | 22 / 23 | two other fade kinds (`fadeSet(4 / 5, 0.5)`) | |
 | 10 | keeps one person shown or hidden by two flags, forever: while the first (collected) flag is clear, shows it only when the second (appear) flag is set | the treasure setup, for items with an appear flag (treasure.md) |
 | 11 | a **sign**: open a field message, close it | examine planes (hero-event kind 3) |
-| 12 | a special warp: picks one of three door objects (158-160) by its argument, plays its animation, then links to **room 123 (`D4_out_2`, outside Realgam Tower)** with an auto-event for the arrival | |
+| 12 | a special warp: picks one of three door objects (158-160) by its argument, plays its animation, waits the same (result ÷ 100) − 0.5 seconds as function 6, then links to **room 123 (`D4_out_2`, outside Realgam Tower)** with an auto-event for the arrival | |
 | 13 | opens the **PC box** (records the return point, pushes room 0x391 `pcbox_menu`) | PCs: examine records (kind 3) in the event table, one per PC, in 27 rooms (**verified**). Besides the Pokémon Centers, Mt. Battle's rest areas, The Under's entrance and hotel and two Realgam Tower rooms, they include rooms that are easy to miss: Pyrite's police station, the building's ground floor, the Colosseum lobby, Pyrite Cave's room just before Miror B. (`M2_cave_1F_1`), an Agate house, the Shadow Lab's garage, the Snagem hideout and the unreachable Card e room. A few room scripts also call the PC menu directly; a list built only from room scripts misses most PCs |
 | 14 | waits for a person's motion, then a people helper | |
-| 15 | a short sleep (half a second scaled) | |
+| 15 | a short sleep (0.6 s × its argument; **verified**) | |
 | 16 | uses a Cologne (`std163_useCologne`) | |
 | 17 | runs **evolution** checks | (callers not traced) |
 | 18 | sends mail 10 | |

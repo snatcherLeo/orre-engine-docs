@@ -30,11 +30,11 @@ faithful port must reproduce every camera draw exactly.
 | Idle timer | `lbl_80478CA8` (s32) | counts down from **200**; reset to 200 after each pick or whenever the idle camera is paused |
 | Last idle target | `lbl_80478CAC` | the grid member picked last; never picked twice in a row |
 | Idle camera off | `lbl_8047B398` (u8) | set by `battleCameraDisable` when a sequence with a camera starts |
-| "Simple" mode | `lbl_8047B399` (u8) | 1 = idle camera paused (`battleCameraDoSimple`), 0 = running (`battleCameraDoFull`) |
+| "Simple" mode | `gBattleGridSimpleCamera` (u8) | 1 = idle camera paused (`battleCameraDoSimple`), 0 = running (`battleCameraDoFull`) |
 | Active shot | `lbl_8047B3EC` (owner), `lbl_8047B3F0` (sequence or none) | the participant the camera is on, and the effect sequence driving it (none = an idle shot) |
 | Shot parameters | `lbl_804673A0` (0x34 bytes, `WazaSequenceCameraParams`) | motion, size and height of the owner, rotation / height / distance ranges, near / middle / far lengths |
 | Field-of-view keys | `lbl_804673D4` (two `CameraFovKey`: start and end value, start and end frame) | the zoom over the shot |
-| Last motion | `lbl_80478CD8` | the procedural motion used last; the next shot avoids repeating it |
+| Last motion | `gLastMotionType` | the procedural motion used last; the next shot avoids repeating it |
 | Shot patterns | `lbl_80371F60` (8 entries) and `lbl_803721C0` (13 entries), each with a duration weight | timing patterns for the procedural shots, chosen by weighted random pick. Each record is an f32 duration plus two `{s32 mode, s32 duration mode, f32 thresholds[4], u32 initial flags, u32 flags, s32 timing mode}` blocks (**verified** from code and data); the 8-entry table serves move sequences other than kinds 8 / 9 |
 | Per-sequence switches | the effect sequence's flags (+0x08) and its camera byte (+0x16) and target part (+0x17) | which motions are allowed, which side to shoot from, and whether this sequence takes the camera at all |
 
@@ -90,6 +90,24 @@ and any move frames any Pokémon sensibly (a move a Pokémon can't normally lear
 Pokémon or behind its tail can only come from a wrong position, facing or size. The random picks draw from the battle's shared generator ("When the shared generator
 is drawn from" below).
 
+**The shot's numbers, in detail** (**verified** from the decompiled code by reimplementing
+the camera):
+- **Size:** 0.577 times the diagonal of the filmed model's bounding box; **height:** the box's vertical extent; both
+  multiplied by a factor for the model's size class (the PKX header's size class). So a model's bounding box should fit
+  it tightly: a loose box frames the shot too wide.
+- **Aim:** the playing slot's attach point 2 (the body centre), or the point the effect file's header names when its
+  mode is 5. The aim doesn't jump: each 60 Hz frame it moves 1/12 of the way toward the joint.
+- **Motion:** of the six (dolly, slide, orbit, and three held shots: push, fixed wide, close-up), every moving one is
+  linear over its duration in seconds. The slide is placed at a fixed world angle (yaw 0), not relative to the
+  Pokémon's facing, then moves 25-35 units along x.
+- **Length:** the slot's time point N-2 (N = the slot record's count at +0x00), or N-1 when that is 0; doubled for a
+  trainer, except for the fixed wide shot.
+- **Zoom:** field-of-view keys come from two weighted pattern tables, timed by the slot's time points; the hit and
+  damage motions (slots 8 and 9) use the longer table.
+- **Two halves:** the damage half aims the camera again, on the target.
+- **Authored cameras** play the archive's camera animation at 30 frames a second, offset by the owner's position,
+  facing and size scale, and mirrored on the far side.
+
 ## Authored camera or procedural shot
 
 **Authored** (`battleCameraStartWaza`, sequence given and its camera resource present): the effect file's **own
@@ -106,23 +124,25 @@ looks, evolution, purification and the present scenes). The other 965 effect fil
 2. **Motion** (`_wazaSequenceCameraSelectMotion`): one of five motions. The effect file's flags (+0x08) allow some:
    bit 0 forces motion 5; bits 3-6 allow motions 3, 0, 1, 2. With no bits (and for every idle shot) all four are
    allowed. With exactly one allowed it is used without a draw; otherwise **one draw per try, retried until the motion
-   differs from the previous shot's**. One species (internal id 0x13A) always gets motion 4.
+   differs from the previous shot's**. One model always gets motion 4: **Wailord** (model id 0x13A = 314, read from the
+   owner's +0x70, the model id; species 314 on the US disc is Wailord with model id 314; **verified** 2026-11-19), and
+   its wide shot leaves the "previous motion" untouched.
    The retry is narrower than that. The draw is laid against the allowed motions in the order
    3, 0, 1, 2, each taking an equal share; when the motion it lands on is the previous shot's, the walk goes on to the
    next allowed motion **with the same number**, and only a number in the last share (whose motion is the previous
    one) costs another draw. So the same draw gives a different motion depending on the previous shot (**verified**
    from the code and a trace: 0.551 with four allowed is motion 1, or motion 2 when the previous shot was motion 1).
-   **The previous shot can be an idle shot** (`lbl_80478CD8` is shared): an idle shot during command selection changes
+   **The previous shot can be an idle shot** (`gLastMotionType` is shared): an idle shot during command selection changes
    which motion the move's first camera takes, and with it how many numbers that camera draws (motion 1: 3 for the
    position, motion 2: 4), so every later roll of the turn (**verified** on a Pyrite Colosseum cup battle).
 3. **Position** (`_wazaSequenceCameraDoPosition`): the motion places and moves the camera:
 
    | Motion | What it does | Draws |
    |---|---|---|
-   | 0 dolly | a move toward or away from the owner, with a random hold and timing | **about 7-11** (two chances, up to two random integers of 2 draws each, two distances, a height, two angles) |
+   | 0 dolly | a move toward or away from the owner, with a random hold and timing | **6 or 8** (**verified** from the code: two chances, up to two random integers of 2 draws each, two distances, a height, two angles) |
    | 1 slide | a sideways move past the owner (offset 25-35, height 1-10, distance 20-50) | **3** |
    | 2 orbit | a turn around the target from one random angle to another (the smaller first) over the shot's duration, at a random distance and height | **4** |
-   | 3 push | a straight move at a random angle, distance and height | **3** |
+   | 3 push | a held shot at a random angle, distance and height; it doesn't actually move (its "move" only runs a timer; **verified** from the code) | **3** |
    | 4 fixed | a fixed wide shot (distance 110) | **0** |
    | 5 close | a fixed-distance close-up at a random height | **1** |
 
@@ -203,9 +223,31 @@ throw's own draws).
   random, so many different shots are all correct; a different shot in a replay means the shared generator was drawn a
   different number of times before the camera's turn (particles, blinks and the camera share it).
 - **Covering every rule:** motions 0-3 are random picks; motion 5 needs a move whose effect flags set bit 0, motion 4
-  needs species 0x13A, and a move that allows a single motion always uses it. A complete check therefore needs battles
+  needs Wailord (model 0x13A), and a move that allows a single motion always uses it. A complete check therefore needs battles
   chosen by move and species (each motion, small and large participants, both sides, single and double battles,
   self- and ally-targeted moves), not more battles at random.
+
+### A logged battle, shot by shot 
+
+From a camera log of the native build replaying Willie's battles:
+- **The developers' move viewer uses the real battle camera** (**verified**): it plays moves through the same start and
+  update functions as a battle. On Tackle the camera's position and aim change every frame: a slide on the attacker,
+  then an orbit on the target.
+- **How often each kind of shot comes up** (**verified** for these battles): 58 shots, 50 for moves and 8 idle; 8 were
+  authored camera animations and 50 computed. Each computed shot drew **6 to 12** numbers from the shared generator.
+- **The view's offset stays fixed while the aim moves** (seen in the log).
+- **Sometimes the per-frame update skips the first two frames** of a shot (seen; cause unknown). Related, measured on the target half (likely):
+  the half's own effects start 2 frames after its camera shot (models-animation.md (not yet published), "When the
+  attack half counts as done").
+- **A shot's first battle frame only aims** (**verified** on all 58 shots of the same log): on that frame the eye, the
+  point looked at and the applied field of view do not move. This holds even for idle shots whose sequence logs a target
+  that frame. Only the sequence's part runs: the aim channel is re-armed and the field-of-view key advances. Likely
+  reason: the sequences start the shot, and they run after that frame's camera update.
+- **The game's sine and cosine** (**verified** from the code): `sinf` and `cosf` compute in double precision and round
+  the result to a float. `PSMTXRotRad` uses them, and the dynamic camera update builds the eye as the position plus the
+  vertical-axis rotation by the shot's yaw applied to (0, height, distance). A camera rebuilt with these exact forms
+  matched the native build's log bit for bit on 31 of the 50 computed shots, and within one or two float bits on the
+  rest.
 
 ## Disc data
 
@@ -236,7 +278,13 @@ animations in already-loaded effect archives. Nothing loads from the disc for th
 
 - Which battle moments turn a sequence's camera switch off (`wazaSequenceSys.c`, floor status 0x22), and therefore
   draw nothing.
-- Exact draw counts per shot (measure with the RNG trace, attributing draws to the camera functions).
+- Exact draw counts per shot (measure with the RNG trace, attributing draws to the camera functions). Known so
+  far: 6 to 12 per computed shot in Willie's battles ("A logged battle" above); the count per motion is still open.
+- Why some shots skip the per-frame update for their first two frames.
 - The grid member count the idle pick uses in doubles (+0x40 and +0x42 of the grid table).
 - The layout of the per-room battle grid data.
-- Which species is internal id 0x13A (always the fixed wide shot).
+- Does the battle wait for each Pokémon's idle animation loop to finish at the end of a turn
+  before the command menu opens? What is known: the turn loop
+  (`battle_main.c`) first lets the turn's action queue finish showing (`fightActionDispFifoAll`), then switches the
+  camera to "full" and opens the command menu; whether that queue, or anything else, waits on the models' idle
+  motions is the open part.

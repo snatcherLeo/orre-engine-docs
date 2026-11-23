@@ -62,6 +62,20 @@ separate path.
   icons (`pdaGetTypeIcon`).
 - **Text speed:** P★DA animations scale with the text-speed setting (`gPdaTextSpeedScale` =
   characters per frame / frame rate).
+- **The Pokémon section's pages** (**verified** from the code: `pdaModelViewerControl` and the
+  page-state code). The section is a small state machine whose
+  current state is the scene work's **+0x1C** (`gPdaSceneWork`):
+  - **0** opening, **1** the top menu (menu 0x3A), **3** the other tab's page (menu 0xCE), **0xB** and **0x64**
+    closing;
+  - **6** the way in; **2** the first page (the list and the info; up and down change the Pokémon); **4** the model
+    page; **5** the third page; **8**, **9** and **0xA** the ways out of 2, 4 and 5;
+  - every page change passes through **0xD**, a fade of a few frames toward the target page held in **+0x24**.
+  The page level (**+0x28**: 0, 1 or 2) is stepped left or right by the D-pad or the left stick, through the P★DA's
+  pad reader (`pdaReadPadInput`, key bits 4 and 8). **State 4, the model page, is the only P★DA state that reads the
+  C-stick** (it spins the model); everywhere else the C-stick does nothing on a GameCube.
+- **The background's scanlines** (**verified** from a log of every draw): the moving lines behind
+  the P★DA's screens are not a texture but **132 separate line draws** (`GX_LINES`), made in the P★DA menu's own
+  drawing (menu 0x71); a band of 12 brighter lines moves down the screen.
 
 ## Disc data
 The P★DA's models, textures and menu layouts are in its room archive (`pda_menu.fsys`) and the menu tables; mail
@@ -71,6 +85,13 @@ texts are in the game text.
 - The memo shows recorded individuals, not species defaults: a mod that changes how Pokémon look by personality
   (gender, shininess) changes the memo too.
 - New P★DA screens: code (the P★DA's screens are C, not script).
+- **Remapping a stick** (**verified** by a replay): anything that feeds the C-stick into the
+  left stick's input (a "right stick works like the left one" option) must stay out of the whole Pokémon section
+  (states 2, 4, 5, 6, 8, 9, 0xA and 0xD), not only the model page: a copied push reaches the pad reader as a
+  sideways key and turns the page.
+- **Mod surface:** data: the memo's save section (12-byte entries) and the mail records; hooks a mod would need: a
+  new screen or page (code), the stick input per state; fixed sizes: the memo keeps one entry per species, the page
+  level runs 0 to 2; vanilla in accurate mode: the pages' controls, since a console route presses through them.
 
 ## Region notes
 - The Shadow list's caption has a branch for Shadow Pokémon held by the Card e placeholder trainer (9). Card e is
@@ -78,5 +99,6 @@ texts are in the game text.
   through Card e data, which US play may not load (battle-engine.md, Card e notes).
 
 ## Open questions
-- The full list of P★DA screens and their menu ids.
+- The full list of P★DA screens and their menu ids (the Pokémon section's
+  states are above).
 - The Shadow list screen's menu id; whether US play ever lists a Card e Shadow Pokémon; what the "People" 3D screen shows.
